@@ -1,0 +1,20 @@
+.MuiAppBar-root {
+  position: static !important;
+  top: 0;
+  left: 0;
+  width: 100%;
+}
+
+.MuiAppBar-root {
+  background-color: #f8f9fa;
+}
+
+.MuiButton-root {
+  text-transform: none;
+  font-weight: 500;
+  font-size: 1rem;
+}
+
+.MuiButton-root:hover {
+  background-color: rgba(0, 0, 0, 0.04);
+}
