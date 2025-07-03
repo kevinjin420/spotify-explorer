@@ -1,2 +1,33 @@
-venv
-node_modules
+# === Python / Django ===
+__pycache__/
+*.py[cod]
+*.sqlite3
+*.log
+*.pot
+*.pyc
+*.pyo
+*.pyd
+
+# Ignore virtual environment
+venv/
+
+# === Node / Frontend ===
+node_modules/
+dist/
+build/
+.env
+.env.*
+
+# === OS / Editor Specific ===
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# === Vite / TypeScript ===
+*.tsbuildinfo
+
+# === Misc ===
+*.bak
+*.swp
+*.swo
