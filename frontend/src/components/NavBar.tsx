@@ -12,16 +12,26 @@ const Navbar = () => {
     navigate("/login"); // Or "/signup" based on your routes
   };
 
+  const handleLogoClick = () => {
+    navigate("/");
+  };
+
   return (
     <nav className="bg-white dark:bg-black shadow-md static w-full z-50">
       <div className="max-w-7xl mx-auto px-5 py-3 flex justify-between items-center">
-        <div className="text-3xl font-bold text-green-600">SpotifyExplorer</div>
+        <div
+          className="text-3xl font-bold text-green-600 cursor-pointer"
+          onClick={handleLogoClick}
+          title="Go to Home"
+        >
+          SpotifyExplorer
+        </div>
 
         <div className="flex items-center space-x-4">
           {!isLoggedIn ? (
             <button
               onClick={handleAuthClick}
-              className="bg-green-600 hover:bg-green-700 text-white font-medium px-3 py-2 rounded-xl transition"
+              className="bg-green-600 hover:bg-green-700 text-white font-medium px-3 py-2 rounded-xl transition cursor-pointer"
             >
               Sign In/Up
             </button>

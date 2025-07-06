@@ -2,7 +2,7 @@
 import { generateCodeVerifier, generateCodeChallenge } from "../utils/pkce.ts";
 
 const clientId = "707e6669168b4e1c8259724099a059d9";
-const redirectUri = `${window.location.origin}/callback`;;
+const redirectUri = `http://127.0.0.1:5173/callback`;;
 const scope = "user-read-private user-read-email";
 
 const Login = () => {
@@ -19,7 +19,6 @@ const Login = () => {
     authUrl.searchParams.set("redirect_uri", redirectUri);
     authUrl.searchParams.set("code_challenge_method", "S256");
     authUrl.searchParams.set("code_challenge", challenge);
-    console.log("Redirect URI:", redirectUri);
     window.location.href = authUrl.toString();
   };
 
@@ -27,7 +26,7 @@ const Login = () => {
     <div className="flex flex-col items-center justify-center h-screen bg-green-600 text-white">
       <h1 className="text-3xl mb-6 font-bold">Spotify Explorer</h1>
       <button
-        className="bg-black text-white px-6 py-3 rounded-lg hover:bg-opacity-80 transition"
+        className="bg-black text-white px-6 py-3 rounded-lg hover:bg-opacity-80 transition cursor-pointer"
         onClick={handleLogin}
       >
         Log in with Spotify
