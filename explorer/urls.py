@@ -22,8 +22,6 @@ router.register(r'users', UserViewSet)
 # Additionally, we include login URLs for the browsable API.
 urlpatterns = [
     path('', include(router.urls)),
-    path('api/register/', views.register, name='register'),
-    path('api/login/', views.login, name='login'),
-    path('api/logout/', views.logout, name='logout'),
+    path('save-spotify-token/', views.SpotifyUserView.as_view(), name='save_spotify_token'),
     path('api-auth/', include('rest_framework.urls', namespace='rest_framework'))
 ]
