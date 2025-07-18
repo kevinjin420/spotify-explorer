@@ -2,8 +2,14 @@
 import { generateCodeVerifier, generateCodeChallenge } from "../utils/pkce.ts";
 
 const clientId = "707e6669168b4e1c8259724099a059d9";
-const redirectUri = `http://127.0.0.1:5173/callback`;;
-const scope = "user-read-private user-read-email";
+const redirectUri = `http://127.0.0.1:5173/callback`;
+const scope = [
+    'user-read-email',
+    'user-read-private',
+    'user-top-read',
+    'playlist-read-private',
+    'playlist-read-collaborative',
+].join(' ');
 
 const Login = () => {
   const handleLogin = async () => {

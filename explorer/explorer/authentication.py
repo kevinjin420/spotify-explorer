@@ -1,24 +1,36 @@
-# explorer/authentication.py
+# your_app/authentication.py
 import jwt
 from django.conf import settings
-from rest_framework.authentication import BaseAuthentication
-from rest_framework.exceptions import AuthenticationFailed
-from explorer.explorer.models import SpotifyUser as User
+from rest_framework import authentication
+from rest_framework import exceptions
+from .models import SpotifyUser
 
-class JWTAuthentication(BaseAuthentication):
+class JWTAuthentication(authentication.BaseAuthentication):
     def authenticate(self, request):
-        auth_header = request.headers.get('Authorization')
+        auth_header = authentication.get_authorization_header(request).split()
 
-        if not auth_header:
-            raise AuthenticationFailed('Authorization header missing')
+        if not auth_header or auth_header[0].lower() != b'bearer':
+            return None
+
+        if len(auth_header) == 1:
+            raise exceptions.AuthenticationFailed('Invalid token header. No credentials provided.')
+        elif len(auth_header) > 2:
+            raise exceptions.AuthenticationFailed('Invalid token header. Token string should not contain spaces.')
 
         try:
-            # Expect the header to be "Bearer <token>"
-            token = auth_header.split(' ')[1]
-            decoded = jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=['HS256'])
-            user = User.objects.get(username=decoded['spotify_id'])  # Or your user model logic
-            return (user, None)  # Return user and None for authentication backend
+            token = auth_header[1].decode('utf-8')
+            payload = jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=['HS256'])
         except jwt.ExpiredSignatureError:
-            raise AuthenticationFailed('Token has expired')
+            raise exceptions.AuthenticationFailed('Token has expired')
         except jwt.InvalidTokenError:
-            raise AuthenticationFailed('Invalid token')
+            raise exceptions.AuthenticationFailed('Invalid token')
+        except Exception as e:
+            raise exceptions.AuthenticationFailed(f'Authentication error: {e}')
+
+        try:
+            spotify_id = payload['spotify_id']
+            user = SpotifyUser.objects.get(spotify_id=spotify_id)
+        except SpotifyUser.DoesNotExist:
+            raise exceptions.AuthenticationFailed('User not found')
+
+        return (user, token)

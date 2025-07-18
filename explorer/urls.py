@@ -1,5 +1,6 @@
 from django.urls import path, include
 from django.contrib.auth.models import User
+from django.contrib import admin
 from rest_framework import routers, serializers, viewsets
 from explorer.explorer import views
 
@@ -22,6 +23,10 @@ router.register(r'users', UserViewSet)
 # Additionally, we include login URLs for the browsable API.
 urlpatterns = [
     path('', include(router.urls)),
-    path('save-spotify-token/', views.SpotifyUserView.as_view(), name='save_spotify_token'),
-    path('api-auth/', include('rest_framework.urls', namespace='rest_framework'))
+    path('admin/', admin.site.urls),
+    path('api-auth/', include('rest_framework.urls', namespace='rest_framework')),
+    path('auth/spotify/', views.SpotifyUserView.as_view(), name='spotify_auth'),
+    path('api/me/', views.MeView.as_view(), name='me'),
+    path('api/spotify/top-items/', views.TopItemsView.as_view(), name='spotify_top_items'),
+    path('api/spotify/playlists/', views.PlaylistsView.as_view(), name='spotify_playlists'),
 ]

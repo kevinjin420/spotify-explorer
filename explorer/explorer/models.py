@@ -6,8 +6,19 @@ class SpotifyUser(models.Model):
     display_name = models.CharField(max_length=255)
     email = models.EmailField()
     profile_image = models.URLField(blank=True, null=True)
-    access_token = models.CharField(max_length=255)
-    refresh_token = models.CharField(max_length=255)
+    access_token = models.TextField()
+    refresh_token = models.TextField()
     scope = models.TextField()
     token_expires_in = models.IntegerField()
     updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return self.spotify_id
+
+    @property
+    def is_authenticated(self):
+        """
+        This property is required by Django's IsAuthenticated permission.
+        An instance of SpotifyUser is always authenticated.
+        """
+        return True
