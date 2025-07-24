@@ -1,14 +1,7 @@
 @import "tailwindcss";
 
-.app-container {
-	display: flex;
-	flex-direction: column;
-	min-height: 100vh;
-	min-width: 100vw;
-}
-
-.content {
-	flex: 1 1 auto;
-	overflow-x: hidden;
-	overflow-y: auto;
+html, body, #root {
+    height: 100%;
+    margin: 0;
+    padding: 0;
 }

@@ -1,57 +1,44 @@
-// src/pages/Dashboard.tsx
-import { useState, useEffect } from "react";
+import { useState, useEffect, Fragment } from "react";
 import { useNavigate } from "react-router-dom";
-import axios from "axios";
+import type { TopTrack, TopArtist, TopAlbum, Playlist } from "../types/spotify";
+import {
+	DocumentDuplicateIcon,
+	ArrowDownTrayIcon,
+	ShareIcon,
+	TrashIcon,
+} from "@heroicons/react/24/outline";
+import { Popover, PopoverButton, PopoverPanel, Transition } from "@headlessui/react";
 
-// --- TypeScript Interfaces for our data ---
-interface UserProfile {
-	spotify_id: string;
-	display_name: string;
-	email: string;
-	profile_image: string | null;
-}
+import { fetchSnapshotData, fetchPlaylists } from "../services/spotifyService";
 
-interface SpotifyImage {
-	url: string;
-	height: number;
-	width: number;
-}
-
-interface TopTrack {
-	name: string;
-	artists: { name: string }[];
-	album: { images: SpotifyImage[] };
-	external_urls: { spotify: string };
-}
-
-interface TopArtist {
-	name: string;
-	images: SpotifyImage[];
-	external_urls: { spotify: string };
-}
-
-interface Playlist {
-	id: string;
-	name: string;
-	images: SpotifyImage[];
-	tracks: { total: number };
-	external_urls: { spotify: string };
-}
-
-// --- API Endpoints ---
-const API_BASE_URL = "http://127.0.0.1:8000/api";
-const API_ME_URL = `${API_BASE_URL}/me/`;
-const API_TOP_ITEMS_URL = `${API_BASE_URL}/spotify/top-items/`;
-const API_PLAYLISTS_URL = `${API_BASE_URL}/spotify/playlists/`;
+const Disclaimer = ({ text }: { text: string }) => (
+  <Popover className="relative flex items-center">
+    <PopoverButton className="ml-1 text-base leading-none text-green-400 hover:text-white focus:outline-none focus:ring-2 focus:ring-green-500 rounded-full">
+      *
+    </PopoverButton>
+    <Transition
+      as={Fragment}
+      enter="transition ease-out duration-200"
+      enterFrom="opacity-0 translate-y-1"
+      enterTo="opacity-100 translate-y-0"
+      leave="transition ease-in duration-150"
+      leaveFrom="opacity-100 translate-y-0"
+      leaveTo="opacity-0 translate-y-1"
+    >
+      <PopoverPanel className="absolute bottom-full left-1/2 z-10 w-[240px] -translate-x-1/2 p-2 mb-2 focus:outline-none text-center text-sm text-green-400 font-normal bg-black border-2 border-green-400 rounded-lg">
+        {text}
+      </PopoverPanel>
+    </Transition>
+  </Popover>
+);
 
 const Dashboard = () => {
 	const navigate = useNavigate();
-
-	// --- State Management ---
-	const [user, setUser] = useState<UserProfile | null>(null);
-	const [topTrack, setTopTrack] = useState<TopTrack | null>(null);
-	const [topArtist, setTopArtist] = useState<TopArtist | null>(null);
-	const [topGenre, setTopGenre] = useState<string | null>(null);
+	// State for snapshot data
+	const [topTracks, setTopTracks] = useState<TopTrack[]>([]);
+	const [topArtists, setTopArtists] = useState<TopArtist[]>([]);
+	const [topAlbums, setTopAlbums] = useState<TopAlbum[]>([]);
+	const [topGenres, setTopGenres] = useState<string[]>([]);
 	const [playlists, setPlaylists] = useState<Playlist[]>([]);
 
 	const [loading, setLoading] = useState<boolean>(true);
@@ -59,39 +46,20 @@ const Dashboard = () => {
 
 	useEffect(() => {
 		const fetchDashboardData = async () => {
-			const token = localStorage.getItem("auth_token");
-			if (!token) {
-				navigate("/login");
-				return;
-			}
-
-			// Create an axios instance with the auth header to reuse
-			const apiClient = axios.create({
-				headers: { Authorization: `Bearer ${token}` },
-			});
-
 			try {
-				// Fetch all data concurrently for better performance
-				const [meResponse, topItemsResponse, playlistsResponse] =
-					await Promise.all([
-						apiClient.get(API_ME_URL),
-						apiClient.get(API_TOP_ITEMS_URL),
-						apiClient.get(API_PLAYLISTS_URL),
-					]);
+				const [snapshot, playlistsData] = await Promise.all([
+					fetchSnapshotData(),
+					fetchPlaylists(),
+				]);
 
-				// Set state with the fetched data
-				setUser(meResponse.data);
-				setTopTrack(topItemsResponse.data.top_track);
-				setTopArtist(topItemsResponse.data.top_artist);
-				setTopGenre(topItemsResponse.data.top_genre);
-				setPlaylists(playlistsResponse.data);
+				setTopTracks(snapshot.top_tracks);
+				setTopArtists(snapshot.top_artists);
+				setTopAlbums(snapshot.top_albums);
+				setTopGenres(snapshot.top_genres);
+				setPlaylists(playlistsData);
 			} catch (err) {
 				console.error("Failed to fetch dashboard data:", err);
-				setError(
-					"Your session has expired or failed. Please log in again."
-				);
-				localStorage.removeItem("auth_token");
-				navigate("/login");
+				setError("Your session may have expired. Please log in again.");
 			} finally {
 				setLoading(false);
 			}
@@ -100,162 +68,218 @@ const Dashboard = () => {
 		fetchDashboardData();
 	}, [navigate]);
 
-	const handleLogout = () => {
-		localStorage.removeItem("auth_token");
-		navigate("/login");
-	};
-
 	if (loading) {
 		return (
-			<div className="flex items-center justify-center h-screen bg-gray-900 text-white">
-				<div className="text-2xl">Loading Dashboard...</div>
+			<div className="wrapper flex items-center justify-center h-screen bg-black text-white">
+				<div className="text-center">
+					<div className="w-16 h-16 border-4 border-dashed rounded-full animate-spin border-green-500 mx-auto"></div>
+					<p className="text-xl mt-4">Loading Your Snapshot...</p>
+				</div>
 			</div>
 		);
 	}
 	if (error) {
 		return (
-			<div className="flex items-center justify-center h-screen bg-gray-900 text-white">
-				<div className="text-2xl text-red-500">{error}</div>
+			<div className="wrapper flex items-center justify-center h-screen bg-black text-red-500">
+				<div className="text-2xl">{error}</div>
 			</div>
 		);
 	}
 
 	return (
-		<div className="min-h-screen bg-gray-900 text-white p-4 sm:p-6 lg:p-8">
+		<div className="wrapper h-full w-full bg-black text-white p-4">
 			<div className="max-w-7xl mx-auto">
-				<header className="flex justify-between items-center mb-10">
-					<h1 className="text-4xl font-bold text-green-400">
-						Dashboard
-					</h1>
-					<button
-						onClick={handleLogout}
-						className="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg transition duration-300"
-					>
-						Logout
-					</button>
-				</header>
+				<h2 className="text-3xl font-bold text-green-400 mb-3">
+					Your 4-Week Snapshot
+				</h2>
 
-				{user && (
-					<div className="bg-gray-800 p-8 rounded-xl shadow-lg flex flex-col sm:flex-row items-center gap-8 mb-10">
-						<img
-							src={
-								user.profile_image ||
-								"https://placehold.co/150x150/1DB954/FFFFFF?text=PFP"
-							}
-							alt="Profile"
-							className="w-36 h-36 rounded-full border-4 border-green-400 object-cover"
-						/>
-						<div className="text-center sm:text-left">
-							<h2 className="text-4xl font-bold">
-								{user.display_name}
-							</h2>
-							<p className="text-lg text-gray-400 mt-2">
-								{user.email}
-							</p>
-						</div>
-					</div>
-				)}
-
-				<div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-					{/* Left Column: Stats */}
-					<div className="lg:col-span-1 space-y-8">
-						<h3 className="text-2xl font-semibold mb-4">
-							Your Top Items
+				<div className="flex flex-wrap border-2 border-green-400 rounded-xl p-2">
+					{/* Top Tracks Column */}
+					<div className="w-full md:w-1/2 lg:w-1/4 px-2 mb-2">
+						<h3 className="text-xl font-semibold text-green-400 mb-2">
+							Top Tracks
 						</h3>
-						{topArtist && (
-							<a
-								href={topArtist.external_urls.spotify}
-								target="_blank"
-								rel="noopener noreferrer"
-								className="bg-gray-800 p-4 rounded-lg flex items-center gap-4 hover:bg-gray-700 transition-colors"
-							>
-								<img
-									src={topArtist.images[0]?.url}
-									alt={topArtist.name}
-									className="w-20 h-20 rounded-full object-cover"
-								/>
-								<div>
-									<p className="text-gray-400 text-sm">
-										Top Artist
-									</p>
-									<p className="font-bold text-lg">
-										{topArtist.name}
-									</p>
-								</div>
-							</a>
-						)}
-						{topTrack && (
-							<a
-								href={topTrack.external_urls.spotify}
-								target="_blank"
-								rel="noopener noreferrer"
-								className="bg-gray-800 p-4 rounded-lg flex items-center gap-4 hover:bg-gray-700 transition-colors"
-							>
-								<img
-									src={topTrack.album.images[0]?.url}
-									alt={topTrack.name}
-									className="w-20 h-20 rounded-md object-cover"
-								/>
-								<div>
-									<p className="text-gray-400 text-sm">
-										Top Track
-									</p>
-									<p className="font-bold text-lg">
-										{topTrack.name}
-									</p>
-									<p className="text-gray-400">
-										{topTrack.artists
-											.map((a) => a.name)
-											.join(", ")}
-									</p>
-								</div>
-							</a>
-						)}
-						{topGenre && (
-							<div className="bg-gray-800 p-4 rounded-lg">
-								<p className="text-gray-400 text-sm">
-									Top Genre
-								</p>
-								<p className="font-bold text-lg capitalize">
-									{topGenre}
-								</p>
-							</div>
-						)}
-					</div>
-
-					{/* Right Column: Playlists */}
-					<div className="lg:col-span-2">
-						<h3 className="text-2xl font-semibold mb-4">
-							Your Playlists ({playlists.length})
-						</h3>
-						<div className="bg-gray-800 p-4 rounded-lg h-[60vh] overflow-y-auto space-y-3">
-							{playlists.map((playlist) => (
-								<a
-									href={playlist.external_urls.spotify}
-									target="_blank"
-									rel="noopener noreferrer"
-									key={playlist.id}
-									className="flex items-center p-3 rounded-md hover:bg-gray-700 transition-colors"
+						<div className="bg-black border-2 border-green-400 rounded-lg py-1">
+							{topTracks.map((track, index) => (
+								<div
+									key={track.id}
+									className="flex items-center px-3 py-2"
 								>
+									<span className="text-lg font-bold text-gray-400 w-6">
+										{index + 1}.
+									</span>
 									<img
 										src={
-											playlist.images[0]?.url ||
-											"https://placehold.co/64x64/1DB954/FFFFFF?text=🎵"
+											track.album.images?.[0]?.url ||
+											"https://placehold.co/48x48/191414/FFFFFF?text=🎵"
 										}
-										alt={playlist.name}
-										className="w-16 h-16 rounded-md object-cover mr-4"
+										alt={track.name}
+										className="w-12 h-12 rounded-md object-cover mx-3"
 									/>
-									<div className="flex-grow">
-										<p className="font-semibold text-white">
-											{playlist.name}
+									<div className="flex-1 truncate">
+										<p className="font-bold text-white truncate">
+											{track.name}
 										</p>
-										<p className="text-sm text-gray-400">
-											{playlist.tracks.total} tracks
+										<p className="text-sm text-gray-400 truncate">
+											{track.artists
+												.map((a) => a.name)
+												.join(", ")}
 										</p>
 									</div>
-								</a>
+								</div>
 							))}
 						</div>
+					</div>
+
+					{/* Top Artists Column */}
+					<div className="w-full md:w-1/2 lg:w-1/4 px-2 mb-2 min-w-[">
+						<h3 className="text-xl font-semibold text-green-400 mb-2">
+							Top Artists
+						</h3>
+						<div className="bg-black border-2 border-green-400 rounded-lg py-1">
+							{topArtists.map((artist, index) => (
+								<div
+									key={artist.id}
+									className="flex items-center px-3 py-2"
+								>
+									<span className="text-lg font-bold text-gray-400 w-6">
+										{index + 1}.
+									</span>
+									<img
+										src={
+											artist.images?.[0]?.url ||
+											"https://placehold.co/48x48/191414/FFFFFF?text=👤"
+										}
+										alt={artist.name}
+										className="w-12 h-12 rounded-full object-cover mx-3"
+									/>
+									<div className="flex-1 truncate">
+										<p className="font-bold text-white truncate">
+											{artist.name}
+										</p>
+									</div>
+								</div>
+							))}
+						</div>
+					</div>
+
+					{/* Top Albums Column */}
+					<div className="w-full md:w-1/2 lg:w-1/4 px-2 mb-2">
+						<h3 className="text-xl font-semibold text-green-400 mb-2 flex items-center">
+							Top Albums
+              <Disclaimer text="Calculated from your top 50 artists" />
+						</h3>
+						<div className="bg-black border-2 border-green-400 rounded-lg py-1">
+							{topAlbums.map((album, index) => (
+								<div
+									key={album.id}
+									className="flex items-center px-3 py-2"
+								>
+									<span className="text-lg font-bold text-gray-400 w-6">
+										{index + 1}.
+									</span>
+									<img
+										src={
+											album.images?.[0]?.url ||
+											"https://placehold.co/48x48/191414/FFFFFF?text=💿"
+										}
+										alt={album.name}
+										className="w-12 h-12 rounded-md object-cover mx-3"
+									/>
+									<div className="flex-1 truncate">
+										<p className="font-bold text-white truncate">
+											{album.name}
+										</p>
+										<p className="text-sm text-gray-400 truncate">
+											{album.artists
+												.map((a) => a.name)
+												.join(", ")}
+										</p>
+									</div>
+								</div>
+							))}
+						</div>
+					</div>
+
+					{/* Top Genres Column */}
+					<div className="w-full md:w-1/2 lg:w-1/4 px-2 mb-2">
+						<h3 className="text-xl font-semibold text-green-400 mb-2 flex items-center">
+							Top Genres
+              <Disclaimer text="Calculated from your top 50 artists" />
+						</h3>
+						<div className="bg-black border-2 border-green-400 rounded-lg py-1">
+							{topGenres.map((genre, index) => (
+								<div
+									key={genre}
+									className="flex items-center px-3 py-2 h-[64px]"
+								>
+									<span className="text-lg font-bold text-gray-400 w-8">
+										{index + 1}.
+									</span>
+									<p className="font-bold text-white capitalize ml-3">
+										{genre}
+									</p>
+								</div>
+							))}
+						</div>
+					</div>
+				</div>
+
+				<div className="mt-3">
+					<h2 className="text-3xl font-bold text-green-400 mb-3">
+						Your Playlists ({playlists.length})
+					</h2>
+					<div className="max-h-[40vh] overflow-y-auto pt-1 border-2 border-green-400 rounded-xl [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+						{playlists.map((playlist) => (
+							<div
+								key={playlist.id}
+								className="flex items-center px-3 py-2 rounded-lg"
+							>
+								<img
+									src={
+										playlist.images?.[0]?.url ||
+										"https://placehold.co/64x64/191414/FFFFFF?text=🎵"
+									}
+									alt={playlist.name}
+									className="w-16 h-16 rounded-md object-cover mr-4"
+								/>
+								<div className="flex-1 truncate">
+									<p className="font-bold text-white truncate text-lg">
+										{playlist.name}
+									</p>
+									<p className="text-sm text-gray-400">
+										{playlist.tracks.total} tracks
+									</p>
+								</div>
+								{/* Action Icons */}
+								<div className="flex items-center space-x-4 pr-4">
+									<button
+										title="Duplicate"
+										className="text-green-400 hover:text-white transition-colors cursor-pointer"
+									>
+										<DocumentDuplicateIcon className="h-6 w-6" />
+									</button>
+									<button
+										title="Download"
+										className="text-green-400 hover:text-white transition-colors cursor-pointer"
+									>
+										<ArrowDownTrayIcon className="h-6 w-6" />
+									</button>
+									<button
+										title="Share"
+										className="text-green-400 hover:text-white transition-colors cursor-pointer"
+									>
+										<ShareIcon className="h-6 w-6" />
+									</button>
+									<button
+										title="Delete"
+										className="text-green-400 hover:text-red-600 transition-colors cursor-pointer"
+									>
+										<TrashIcon className="h-6 w-6" />
+									</button>
+								</div>
+							</div>
+						))}
 					</div>
 				</div>
 			</div>

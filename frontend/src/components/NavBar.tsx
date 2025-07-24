@@ -1,16 +1,30 @@
 // src/components/Navbar.tsx
 import { Fragment } from "react";
 import { useNavigate } from "react-router-dom";
-import { Menu, Transition } from "@headlessui/react";
-import { useAuth } from "../utils/useAuth";
+import {
+	Menu,
+	Transition,
+	MenuButton,
+	MenuItem,
+	MenuItems,
+} from "@headlessui/react";
+import { Square2StackIcon, PowerIcon, ChartBarIcon } from "@heroicons/react/16/solid";
+import { useAuthStore } from "../store/authStore";
+import { generateCodeVerifier, generateCodeChallenge } from "../utils/pkce.ts";
+
+const clientId = "707e6669168b4e1c8259724099a059d9";
+const redirectUri = `http://127.0.0.1:5173/callback`;
+const scope = [
+	"user-read-email",
+	"user-read-private",
+	"user-top-read",
+	"playlist-read-private",
+	"playlist-read-collaborative",
+].join(" ");
 
 const Navbar = () => {
-	const { isLoggedIn, user, logout } = useAuth();
+	const { user, isLoggedIn, logout } = useAuthStore();
 	const navigate = useNavigate();
-
-	const handleAuthClick = () => {
-		navigate("/login");
-	};
 
 	const handleLogoClick = () => {
 		navigate("/");
@@ -20,13 +34,37 @@ const Navbar = () => {
 		navigate("/dashboard");
 	};
 
+	const handleStatsClick = () => {
+		navigate("/stats");
+	};
+
+	const handleLogin = async () => {
+		const verifier = generateCodeVerifier();
+		const challenge = await generateCodeChallenge(verifier);
+
+		localStorage.setItem("spotify_verifier", verifier);
+
+		const authUrl = new URL("https://accounts.spotify.com/authorize");
+		authUrl.searchParams.set("response_type", "code");
+		authUrl.searchParams.set("client_id", clientId);
+		authUrl.searchParams.set("scope", scope);
+		authUrl.searchParams.set("redirect_uri", redirectUri);
+		authUrl.searchParams.set("code_challenge_method", "S256");
+		authUrl.searchParams.set("code_challenge", challenge);
+		window.location.href = authUrl.toString();
+	};
+
+	const handleLogout = () => {
+		logout();
+		navigate("/");
+	};
+
 	return (
-		<nav className="bg-gray-900 text-white shadow-md sticky top-0 w-full z-50">
-			<div className="max-w-7xl mx-auto px-5 py-3 flex justify-between items-center">
+		<nav className="bg-black sticky top-0 w-full z-50 border-b-2 border-b-green-400">
+			<div className="max-w-7xl mx-auto p-3 flex justify-between items-center">
 				<div
 					className="text-3xl font-bold text-green-400 cursor-pointer"
 					onClick={handleLogoClick}
-					title="Go to Home"
 				>
 					SpotifyExplorer
 				</div>
@@ -34,8 +72,8 @@ const Navbar = () => {
 				<div className="flex items-center space-x-4">
 					{!isLoggedIn ? (
 						<button
-							onClick={handleAuthClick}
-							className="bg-green-500 hover:bg-green-600 text-white font-bold px-4 py-2 rounded-2xl transition duration-300"
+							onClick={handleLogin}
+							className="bg-green-500 hover:bg-green-600 text-white font-bold px-4 py-2 rounded transition duration-300 cursor-pointer"
 						>
 							Sign In
 						</button>
@@ -44,21 +82,15 @@ const Navbar = () => {
 							as="div"
 							className="relative inline-block text-left"
 						>
-							<div>
-								<Menu.Button className="flex text-sm rounded-full focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-white">
-									<span className="sr-only">
-										Open user menu
-									</span>
-									<img
-										className="w-10 h-10 rounded-full object-cover border-2 border-green-400"
-										src={
-											user?.profile_image ||
-											"https://placehold.co/40x40/191414/FFFFFF?text=PFP"
-										}
-										alt="User profile"
-									/>
-								</Menu.Button>
-							</div>
+							<MenuButton className="flex text-sm rounded-full focus:outline-none cursor-pointer">
+								<img
+									className="w-10 h-10 rounded-full object-cover border-2 border-green-400"
+									src={
+										user?.profile_image ||
+										"placeholder.svg"
+									}
+								/>
+							</MenuButton>
 
 							<Transition
 								as={Fragment}
@@ -69,34 +101,35 @@ const Navbar = () => {
 								leaveFrom="transform opacity-100 scale-100"
 								leaveTo="transform opacity-0 scale-95"
 							>
-								<Menu.Items className="origin-top-right absolute right-0 mt-2 w-48 rounded-md shadow-lg py-1 bg-gray-800 ring-1 ring-black ring-opacity-5 focus:outline-none">
-									<Menu.Item>
-										{({ active }) => (
-											<a
-												href="#"
-												onClick={handleDashboardClick}
-												className={`${
-													active ? "bg-gray-700" : ""
-												} block px-4 py-2 text-sm text-gray-200`}
-											>
-												Dashboard
-											</a>
-										)}
-									</Menu.Item>
-									<Menu.Item>
-										{({ active }) => (
-											<a
-												href="#"
-												onClick={logout}
-												className={`${
-													active ? "bg-gray-700" : ""
-												} block px-4 py-2 text-sm text-gray-200`}
-											>
-												Logout
-											</a>
-										)}
-									</Menu.Item>
-								</Menu.Items>
+								<MenuItems className="origin-top-right absolute right-0 mt-1 rounded-md shadow-lg bg-black focus:outline-none border-2 border-green-400 w-auto">
+									<MenuItem>
+										<button
+											onClick={handleDashboardClick}
+											className="px-3 py-2 text-sm text-green-400 font-bold w-full text-left cursor-pointer flex"
+										>
+											<Square2StackIcon className="size-5 fill-green-400 me-2" />
+											Dashboard
+										</button>
+									</MenuItem>
+									<MenuItem>
+										<button
+											onClick={handleStatsClick}
+											className="px-3 py-2 text-sm text-green-400 font-bold w-full text-left cursor-pointer flex"
+										>
+											<ChartBarIcon className="size-5 fill-green-400 me-2" />
+											Stats
+										</button>
+									</MenuItem>
+									<MenuItem>
+										<button
+											onClick={handleLogout}
+											className="px-3 py-2 text-sm text-green-400 font-bold w-full text-left cursor-pointer flex"
+										>
+											<PowerIcon className="size-5 fill-green-400 me-2" />
+											Logout
+										</button>
+									</MenuItem>
+								</MenuItems>
 							</Transition>
 						</Menu>
 					)}

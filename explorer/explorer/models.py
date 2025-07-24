@@ -17,8 +17,4 @@ class SpotifyUser(models.Model):
 
     @property
     def is_authenticated(self):
-        """
-        This property is required by Django's IsAuthenticated permission.
-        An instance of SpotifyUser is always authenticated.
-        """
         return True

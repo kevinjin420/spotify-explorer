@@ -10,26 +10,24 @@ import requests
 from collections import Counter
 import jwt
 
+# --- User Authentication Views (Unchanged) ---
 
 class SpotifyUserView(APIView):
-    permission_classes = [AllowAny]  # new users
+    """Handles user creation and authentication, returning a JWT."""
+    permission_classes = [AllowAny]
 
     def post(self, request):
-        # Use the serializer for validation
         serializer = SpotifyUserSerializer(data=request.data)
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-        # .validated_data is now a clean, validated dictionary
         validated_data = serializer.validated_data
         
-        # update_or_create is great! Keep using it.
         user, created = SpotifyUser.objects.update_or_create(
             spotify_id=validated_data['spotify_id'],
             defaults=validated_data
         )
 
-        # JWT generation remains the same
         payload = {
             'spotify_id': user.spotify_id,
             'exp': datetime.utcnow() + timedelta(hours=1),
@@ -39,10 +37,10 @@ class SpotifyUserView(APIView):
         return Response({"message": "User authenticated", "token": token}, status=status.HTTP_200_OK)
 
     def delete(self, request):
+        # This part is for user deletion, remains unchanged.
         spotify_id = request.data.get('spotify_id')
         if not spotify_id:
             return Response({'error': 'spotify_id required'}, status=status.HTTP_400_BAD_REQUEST)
-
         try:
             user = SpotifyUser.objects.get(spotify_id=spotify_id)
             user.delete()
@@ -52,71 +50,162 @@ class SpotifyUserView(APIView):
 
 
 class MeView(APIView):
+    """Returns the profile of the currently authenticated user."""
     permission_classes = [IsAuthenticated] 
 
     def get(self, request):
-        # Because of JWTAuthentication, request.user is the authenticated SpotifyUser instance
         serializer = SpotifyUserSerializer(request.user)
         return Response(serializer.data)
+
+# --- Base API Views for Spotify ---
 
 class SpotifyAPIView(APIView):
     """Base class to handle authenticated requests to the Spotify API."""
     permission_classes = [IsAuthenticated]
 
-    def get_spotify_api_headers(self, request):
-        # request.user is the authenticated SpotifyUser instance from our JWT auth
+    def get_spotify_api_headers(self):
+        # We can remove 'request' as an argument since it's available as self.request
         return {
-            'Authorization': f'Bearer {request.user.access_token}'
+            'Authorization': f'Bearer {self.request.user.access_token}'
         }
 
     def spotify_request(self, endpoint, params=None):
-        headers = self.get_spotify_api_headers(self.request)
-        response = requests.get(f'https://api.spotify.com/v1{endpoint}', headers=headers, params=params)
-        response.raise_for_status() # Will raise an exception for 4xx/5xx errors
-        return response.json()
-
-
-class TopItemsView(SpotifyAPIView):
-    """View to get the user's top track, artist, and derived top genre."""
-    def get(self, request, *args, **kwargs):
+        headers = self.get_spotify_api_headers()
         try:
-            # Fetch top tracks and artists from Spotify
-            top_tracks_data = self.spotify_request('/me/top/tracks', {'limit': 1, 'time_range': 'short_term'})
-            top_artists_data = self.spotify_request('/me/top/artists', {'limit': 10, 'time_range': 'short_term'})
+            response = requests.get(f'https://api.spotify.com/v1{endpoint}', headers=headers, params=params)
+            response.raise_for_status() # Raises an HTTPError for bad responses (4xx or 5xx)
+            return response.json()
+        except requests.exceptions.HTTPError as e:
+            # Handle token expiration or other API errors gracefully
+            if e.response.status_code == 401:
+                # Here you could implement token refresh logic if you have the refresh_token
+                return {'error': 'Spotify token may have expired.', 'status_code': 401}
+            return {'error': str(e), 'status_code': e.response.status_code}
+        except requests.exceptions.RequestException as e:
+            # Handle network errors
+            return {'error': f'Network error: {str(e)}', 'status_code': 503}
 
-            top_track = top_tracks_data['items'][0] if top_tracks_data['items'] else None
-            top_artist = top_artists_data['items'][0] if top_artists_data['items'] else None
+# --- NEW: Snapshot View ---
 
-            # Derive top genre from the list of top artists
-            all_genres = [genre for artist in top_artists_data.get('items', []) for genre in artist.get('genres', [])]
-            top_genre = Counter(all_genres).most_common(1)[0][0] if all_genres else None
+class SnapshotView(SpotifyAPIView):
+    """
+    Fetches a snapshot of the user's top 5 tracks, artists, genres, 
+    and albums for the short term (last 4 weeks).
+    """
+    def get(self, request, *args, **kwargs):
+        # 1. Fetch top 50 tracks and artists to derive albums and genres
+        top_tracks_data = self.spotify_request('/me/top/tracks', {'limit': 50, 'time_range': 'short_term'})
+        top_artists_data = self.spotify_request('/me/top/artists', {'limit': 50, 'time_range': 'short_term'})
 
-            response_data = {
-                'top_track': top_track,
-                'top_artist': top_artist,
-                'top_genre': top_genre,
-            }
-            return Response(response_data)
-        except Exception as e:
-            return Response({'error': f'Failed to fetch from Spotify: {str(e)}'}, status=500)
+        # Error handling for API requests
+        if 'error' in top_tracks_data or 'error' in top_artists_data:
+            return Response({'error': 'Failed to fetch data from Spotify.'}, status=status.HTTP_502_BAD_GATEWAY)
 
+        # 2. Process data
+        top_tracks = top_tracks_data.get('items', [])
+        top_artists = top_artists_data.get('items', [])
+
+        # Derive top 5 genres from the top 50 artists
+        all_genres = [genre for artist in top_artists for genre in artist.get('genres', [])]
+        top_genres = [genre[0] for genre in Counter(all_genres).most_common(5)]
+
+        # Derive top 5 albums from the top 50 tracks
+        all_albums = [track['album'] for track in top_tracks if 'album' in track]
+        # Count album occurrences by ID to handle duplicates
+        album_counts = Counter(album['id'] for album in all_albums)
+        # Get the unique album objects, sorted by their frequency
+        unique_albums = {album['id']: album for album in all_albums}
+        sorted_album_ids = [album_id for album_id, count in album_counts.most_common(5)]
+        top_albums = [unique_albums[album_id] for album_id in sorted_album_ids]
+
+        # 3. Assemble response
+        response_data = {
+            'top_tracks': top_tracks[:5],
+            'top_artists': top_artists[:5],
+            'top_genres': top_genres,
+            'top_albums': top_albums,
+        }
+        return Response(response_data)
+
+
+# detailed stats views
+
+class TopItemsBaseView(SpotifyAPIView):
+    """Base view for fetching top items with time_range parameter."""
+    def get_time_range(self):
+        time_range = self.request.query_params.get('time_range', 'medium_term')
+        if time_range not in ['short_term', 'medium_term', 'long_term']:
+            return 'medium_term' # Default to medium_term if invalid
+        return time_range
+
+class TopTracksView(TopItemsBaseView):
+    """Returns the top 50 tracks for the user."""
+    def get(self, request, *args, **kwargs):
+        time_range = self.get_time_range()
+        data = self.spotify_request('/me/top/tracks', {'limit': 50, 'time_range': time_range})
+        if 'error' in data:
+            return Response(data, status=data.get('status_code', 502))
+        return Response(data.get('items', []))
+
+class TopArtistsView(TopItemsBaseView):
+    """Returns the top 50 artists for the user."""
+    def get(self, request, *args, **kwargs):
+        time_range = self.get_time_range()
+        data = self.spotify_request('/me/top/artists', {'limit': 50, 'time_range': time_range})
+        if 'error' in data:
+            return Response(data, status=data.get('status_code', 502))
+        return Response(data.get('items', []))
+
+class TopGenresView(TopItemsBaseView):
+    """Derives and returns the top 50 genres for the user."""
+    def get(self, request, *args, **kwargs):
+        time_range = self.get_time_range()
+        artists_data = self.spotify_request('/me/top/artists', {'limit': 50, 'time_range': time_range})
+        if 'error' in artists_data:
+            return Response(artists_data, status=artists_data.get('status_code', 502))
+
+        all_genres = [genre for artist in artists_data.get('items', []) for genre in artist.get('genres', [])]
+        # Return a list of objects with genre name and count
+        top_genres = [{'genre': genre, 'count': count} for genre, count in Counter(all_genres).most_common(50)]
+        return Response(top_genres)
+
+class TopAlbumsView(TopItemsBaseView):
+    """Derives and returns the top 50 albums for the user."""
+    def get(self, request, *args, **kwargs):
+        time_range = self.get_time_range()
+        tracks_data = self.spotify_request('/me/top/tracks', {'limit': 50, 'time_range': time_range})
+        if 'error' in tracks_data:
+            return Response(tracks_data, status=tracks_data.get('status_code', 502))
+        
+        all_albums = [track['album'] for track in tracks_data.get('items', []) if 'album' in track]
+        album_counts = Counter(album['id'] for album in all_albums)
+        unique_albums = {album['id']: album for album in all_albums}
+
+        # Create a list of album objects with their play counts in the top 50 tracks
+        sorted_albums = []
+        for album_id, count in album_counts.most_common(50):
+            album_data = unique_albums[album_id]
+            album_data['count'] = count # Add the count to the album object
+            sorted_albums.append(album_data)
+            
+        return Response(sorted_albums)
 
 class PlaylistsView(SpotifyAPIView):
     """View to get all of a user's playlists, handling pagination."""
     def get(self, request, *args, **kwargs):
-        try:
-            playlists = []
-            # Start with the first page of playlists
-            endpoint = '/me/playlists'
-            params = {'limit': 50} # Max limit per request
+        playlists = []
+        endpoint = '/me/playlists'
+        params = {'limit': 50}
 
-            while endpoint:
-                data = self.spotify_request(endpoint, params=params)
-                playlists.extend(data['items'])
-                endpoint = data.get('next') # Get the URL for the next page, or None if it's the last page
-                params = None # The 'next' URL already includes all necessary parameters
+        while endpoint:
+            data = self.spotify_request(endpoint, params=params)
+            if 'error' in data:
+                return Response(data, status=data.get('status_code', 502))
+            
+            playlists.extend(data.get('items', []))
+            # Get the URL for the next page, or None if it's the last page
+            endpoint = data.get('next') 
+            # The 'next' URL is a full URL, so no params are needed for subsequent requests
+            params = None 
 
-            return Response(playlists)
-        except Exception as e:
-            return Response({'error': f'Failed to fetch from Spotify: {str(e)}'}, status=500)
-
+        return Response(playlists)
