@@ -1,4 +1,3 @@
-// Base types that are likely already defined
 export interface Image {
   url: string;
   height: number | null;
@@ -26,7 +25,7 @@ export interface TopTrack {
   id: string;
   name: string;
   artists: Artist[];
-  album: TopAlbum; // Use the new TopAlbum type
+  album: TopAlbum;
   external_urls: ExternalUrls;
 }
 
@@ -48,14 +47,13 @@ export interface Playlist {
   external_urls: ExternalUrls;
 }
 
-// --- NEW TYPES ---
 export interface TopAlbum {
   id: string;
   name:string;
   artists: Artist[];
   images: Image[];
   external_urls: ExternalUrls;
-  count?: number; // Optional: for detailed view
+  count?: number;
 }
 
 export interface Genre {
@@ -63,7 +61,6 @@ export interface Genre {
   count: number;
 }
 
-// Type for the new Snapshot API response
 export interface SnapshotData {
     top_tracks: TopTrack[];
     top_artists: TopArtist[];

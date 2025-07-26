@@ -32,4 +32,6 @@ urlpatterns = [
     path('api/spotify/top-albums/', views.TopAlbumsView.as_view(), name='spotify_top_albums'),
     path('api/spotify/top-genres/', views.TopGenresView.as_view(), name='spotify_top_genres'),
     path('api/spotify/playlists/', views.PlaylistsView.as_view(), name='spotify_playlists'),
+    path('api/spotify/playlists/<str:playlist_id>/', views.PlaylistDetailView.as_view()),
+    path('api/download/', views.DownloadTrack.as_view(), name='download_track'),
 ]

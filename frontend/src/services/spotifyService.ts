@@ -6,17 +6,14 @@ import type {
 	TopAlbum,
 	Genre,
 	SnapshotData,
-    Playlist,
+	Playlist,
 } from "../types/spotify";
 
 const API_BASE_URL = "http://127.0.0.1:8000/api";
 
-// This helper function creates an Axios client with the JWT token.
-const getAuthClient = () => {
+const getClient = () => {
 	const token = localStorage.getItem("auth_token");
 	if (!token) {
-		// Throwing an error here ensures that any function calling this
-		// will fail early if the user is not authenticated.
 		throw new Error("No auth token found. Please log in again.");
 	}
 
@@ -28,31 +25,25 @@ const getAuthClient = () => {
 	});
 };
 
-// --- CORE API FUNCTIONS ---
-
 export const fetchUserProfile = async (): Promise<UserProfile> => {
-	const client = getAuthClient();
+	const client = getClient();
 	const response = await client.get("/me/");
 	return response.data;
 };
 
-// --- NEW SNAPSHOT FUNCTION ---
-
 export const fetchSnapshotData = async (): Promise<SnapshotData> => {
-	const client = getAuthClient();
+	const client = getClient();
 	// This endpoint matches the new SnapshotView in your Django backend.
 	const response = await client.get("/spotify/snapshot/");
 	return response.data;
 };
-
-// --- NEW DETAILED TOP ITEM FUNCTIONS ---
 
 type TimeRange = "short_term" | "medium_term" | "long_term";
 
 export const fetchTopTracks = async (
 	timeRange: TimeRange
 ): Promise<TopTrack[]> => {
-	const client = getAuthClient();
+	const client = getClient();
 	const response = await client.get("/spotify/top-tracks/", {
 		params: { time_range: timeRange },
 	});
@@ -62,7 +53,7 @@ export const fetchTopTracks = async (
 export const fetchTopArtists = async (
 	timeRange: TimeRange
 ): Promise<TopArtist[]> => {
-	const client = getAuthClient();
+	const client = getClient();
 	const response = await client.get("/spotify/top-artists/", {
 		params: { time_range: timeRange },
 	});
@@ -72,7 +63,7 @@ export const fetchTopArtists = async (
 export const fetchTopAlbums = async (
 	timeRange: TimeRange
 ): Promise<TopAlbum[]> => {
-	const client = getAuthClient();
+	const client = getClient();
 	const response = await client.get("/spotify/top-albums/", {
 		params: { time_range: timeRange },
 	});
@@ -82,7 +73,7 @@ export const fetchTopAlbums = async (
 export const fetchTopGenres = async (
 	timeRange: TimeRange
 ): Promise<Genre[]> => {
-	const client = getAuthClient();
+	const client = getClient();
 	const response = await client.get("/spotify/top-genres/", {
 		params: { time_range: timeRange },
 	});
@@ -90,7 +81,13 @@ export const fetchTopGenres = async (
 };
 
 export const fetchPlaylists = async (): Promise<Playlist[]> => {
-    const client = getAuthClient();
-    const response = await client.get("/spotify/playlists/");
-    return response.data;
+	const client = getClient();
+	const response = await client.get("/spotify/playlists/");
+	return response.data;
+};
+
+export const fetchPlaylist = async (playlistId: string): Promise<Playlist> => {
+	const client = getClient();
+	const response = await client.get(`/spotify/playlists/${playlistId}`);
+	return response.data;
 };

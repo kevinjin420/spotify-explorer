@@ -4,6 +4,8 @@ import Navbar from './components/NavBar';
 import Home from './pages/Home';
 import Callback from "./pages/Callback";
 import Dashboard from "./pages/Dashboard"
+import Download from './pages/Download';
+import NotFound from './pages/404'
 import './App.css'
 
 export default function App() {
@@ -17,7 +19,8 @@ export default function App() {
             <Route path="/stats" element={<Home />} />
             <Route path="/callback" element={<Callback />} />
             <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="*" element={<h1>404 - Page Not Found</h1>} />
+            <Route path="/download/:playlistId" element={<Download />} />
+            <Route path="*" element={<NotFound />} />
           </Routes>
         </main>
       </div>

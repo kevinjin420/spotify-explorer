@@ -2,39 +2,44 @@ import { useState, useEffect, Fragment } from "react";
 import { useNavigate } from "react-router-dom";
 import type { TopTrack, TopArtist, TopAlbum, Playlist } from "../types/spotify";
 import {
-	DocumentDuplicateIcon,
 	ArrowDownTrayIcon,
-	ShareIcon,
 	TrashIcon,
+	LinkIcon,
 } from "@heroicons/react/24/outline";
-import { Popover, PopoverButton, PopoverPanel, Transition } from "@headlessui/react";
+import {
+	Popover,
+	PopoverButton,
+	PopoverPanel,
+	Transition,
+} from "@headlessui/react";
+import { useAuthStore } from "../store/authStore";
 
 import { fetchSnapshotData, fetchPlaylists } from "../services/spotifyService";
 
 const Disclaimer = ({ text }: { text: string }) => (
-  <Popover className="relative flex items-center">
-    <PopoverButton className="ml-1 text-base leading-none text-green-400 hover:text-white focus:outline-none focus:ring-2 focus:ring-green-500 rounded-full">
-      *
-    </PopoverButton>
-    <Transition
-      as={Fragment}
-      enter="transition ease-out duration-200"
-      enterFrom="opacity-0 translate-y-1"
-      enterTo="opacity-100 translate-y-0"
-      leave="transition ease-in duration-150"
-      leaveFrom="opacity-100 translate-y-0"
-      leaveTo="opacity-0 translate-y-1"
-    >
-      <PopoverPanel className="absolute bottom-full left-1/2 z-10 w-[240px] -translate-x-1/2 p-2 mb-2 focus:outline-none text-center text-sm text-green-400 font-normal bg-black border-2 border-green-400 rounded-lg">
-        {text}
-      </PopoverPanel>
-    </Transition>
-  </Popover>
+	<Popover className="relative flex items-center">
+		<PopoverButton className="ml-1 text-base leading-none text-green-400 hover:text-white focus:outline-none focus:ring-2 focus:ring-green-500 rounded-full">
+			*
+		</PopoverButton>
+		<Transition
+			as={Fragment}
+			enter="transition ease-out duration-200"
+			enterFrom="opacity-0 translate-y-1"
+			enterTo="opacity-100 translate-y-0"
+			leave="transition ease-in duration-150"
+			leaveFrom="opacity-100 translate-y-0"
+			leaveTo="opacity-0 translate-y-1"
+		>
+			<PopoverPanel className="absolute bottom-full left-1/2 z-10 w-[240px] -translate-x-1/2 p-2 mb-2 focus:outline-none text-center text-sm text-green-400 font-normal bg-black border-2 border-green-400 rounded-lg">
+				{text}
+			</PopoverPanel>
+		</Transition>
+	</Popover>
 );
 
 const Dashboard = () => {
+	const { logout } = useAuthStore();
 	const navigate = useNavigate();
-	// State for snapshot data
 	const [topTracks, setTopTracks] = useState<TopTrack[]>([]);
 	const [topArtists, setTopArtists] = useState<TopArtist[]>([]);
 	const [topAlbums, setTopAlbums] = useState<TopAlbum[]>([]);
@@ -60,13 +65,25 @@ const Dashboard = () => {
 			} catch (err) {
 				console.error("Failed to fetch dashboard data:", err);
 				setError("Your session may have expired. Please log in again.");
+				logout();
+				navigate("/");
 			} finally {
 				setLoading(false);
 			}
 		};
 
 		fetchDashboardData();
-	}, [navigate]);
+	}, [navigate, logout]);
+
+	const handleDownload = (playlist: Playlist) => {
+		console.log("Navigating to download page for:", playlist.name);
+		navigate(`/download/${playlist.id}`);
+	};
+
+	const handleDelete = (playlist: Playlist) => {
+		console.log("Delete playlist:", playlist.name, playlist.id);
+		// TODO: Implement playlist deletion logic (requires confirmation)
+	};
 
 	if (loading) {
 		return (
@@ -167,7 +184,7 @@ const Dashboard = () => {
 					<div className="w-full md:w-1/2 lg:w-1/4 px-2 mb-2">
 						<h3 className="text-xl font-semibold text-green-400 mb-2 flex items-center">
 							Top Albums
-              <Disclaimer text="Calculated from your top 50 artists" />
+							<Disclaimer text="Calculated from your top 50 artists" />
 						</h3>
 						<div className="bg-black border-2 border-green-400 rounded-lg py-1">
 							{topAlbums.map((album, index) => (
@@ -205,7 +222,7 @@ const Dashboard = () => {
 					<div className="w-full md:w-1/2 lg:w-1/4 px-2 mb-2">
 						<h3 className="text-xl font-semibold text-green-400 mb-2 flex items-center">
 							Top Genres
-              <Disclaimer text="Calculated from your top 50 artists" />
+							<Disclaimer text="Calculated from your top 50 artists" />
 						</h3>
 						<div className="bg-black border-2 border-green-400 rounded-lg py-1">
 							{topGenres.map((genre, index) => (
@@ -251,28 +268,27 @@ const Dashboard = () => {
 										{playlist.tracks.total} tracks
 									</p>
 								</div>
-								{/* Action Icons */}
+								{/* --- Action Icons --- */}
 								<div className="flex items-center space-x-4 pr-4">
-									<button
-										title="Duplicate"
+									<a
+										href={playlist.external_urls.spotify}
+										target="_blank"
+										rel="noopener noreferrer"
+										title="Open in Spotify"
 										className="text-green-400 hover:text-white transition-colors cursor-pointer"
 									>
-										<DocumentDuplicateIcon className="h-6 w-6" />
-									</button>
+										<LinkIcon className="h-6 w-6" />
+									</a>
 									<button
 										title="Download"
+										onClick={() => handleDownload(playlist)}
 										className="text-green-400 hover:text-white transition-colors cursor-pointer"
 									>
 										<ArrowDownTrayIcon className="h-6 w-6" />
 									</button>
 									<button
-										title="Share"
-										className="text-green-400 hover:text-white transition-colors cursor-pointer"
-									>
-										<ShareIcon className="h-6 w-6" />
-									</button>
-									<button
 										title="Delete"
+										onClick={() => handleDelete(playlist)}
 										className="text-green-400 hover:text-red-600 transition-colors cursor-pointer"
 									>
 										<TrashIcon className="h-6 w-6" />
