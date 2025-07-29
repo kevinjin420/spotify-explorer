@@ -8,7 +8,8 @@ class SpotifyUser(models.Model):
     access_token = models.TextField()
     refresh_token = models.TextField()
     scope = models.TextField()
-    token_expires_in = models.IntegerField()
+    token_expires_in = models.IntegerField(null=True, blank=True)
+    token_expires_at = models.DateTimeField(null=True, blank=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):

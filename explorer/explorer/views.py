@@ -6,10 +6,15 @@ from .models import SpotifyUser, Playlist
 from .serializers import SpotifyUserSerializer, SpotifyPlaylistSerializer
 from datetime import datetime, timedelta
 from django.conf import settings
+from django.utils import timezone
+from django.utils.decorators import method_decorator
+from django.views.decorators.cache import cache_page
+from django.views.decorators.vary import vary_on_cookie, vary_on_headers
 import requests
 from collections import Counter
 import jwt
 import os
+import time
 from yt_dlp import YoutubeDL
 
 class SpotifyUserView(APIView):
@@ -22,15 +27,20 @@ class SpotifyUserView(APIView):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         validated_data = serializer.validated_data
+        token_expires_in = validated_data['token_expires_in']
+        token_expires_at = datetime.now() + timedelta(seconds=token_expires_in)
         
         user, created = SpotifyUser.objects.update_or_create(
             spotify_id=validated_data['spotify_id'],
-            defaults=validated_data
+            defaults={
+                **validated_data,
+                'token_expires_at': token_expires_at,
+            }
         )
 
         payload = {
             'spotify_id': user.spotify_id,
-            'exp': datetime.utcnow() + timedelta(hours=1),
+            'exp': datetime.now() + timedelta(hours=1),
         }
         token = jwt.encode(payload, settings.JWT_SECRET_KEY, algorithm='HS256')
 
@@ -61,7 +71,36 @@ class SpotifyAPIView(APIView):
     """Base class to handle authenticated requests to the Spotify API."""
     permission_classes = [IsAuthenticated]
 
+class SpotifyAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def refresh_access_token_if_needed(self, user):
+        print("Refreshing Access Token")
+        time_since_update = (timezone.now() - user.updated_at).total_seconds()
+        if time_since_update < user.token_expires_in:
+            return
+
+        response = requests.post(
+            'https://accounts.spotify.com/api/token',
+            data={
+                'grant_type': 'refresh_token',
+                'refresh_token': user.refresh_token,
+                'client_id': settings.SPOTIFY_CLIENT_ID,
+                'client_secret': settings.SPOTIFY_CLIENT_SECRET,
+            },
+            headers={'Content-Type': 'application/x-www-form-urlencoded'}
+        )
+
+        if response.status_code != 200:
+            raise Exception('Failed to refresh token')
+
+        token_data = response.json()
+        user.access_token = token_data['access_token']
+        user.token_expires_in = token_data.get('expires_in', 3600)
+        user.save()
+
     def get_spotify_api_headers(self):
+        self.refresh_access_token_if_needed(self.request.user)
         return {
             'Authorization': f'Bearer {self.request.user.access_token}'
         }
@@ -81,7 +120,12 @@ class SpotifyAPIView(APIView):
 
 
 class SnapshotView(SpotifyAPIView):
+    @method_decorator(cache_page(60 * 5))
+    @method_decorator(vary_on_headers('Authorization'))
     def get(self, request, *args, **kwargs):
+        print("Re-fetching SnapshotView")
+        time.sleep(2) # artificial delay
+
         top_tracks_data = self.spotify_request('/me/top/tracks', {'limit': 50, 'time_range': 'short_term'})
         top_artists_data = self.spotify_request('/me/top/artists', {'limit': 50, 'time_range': 'short_term'})
 
@@ -117,7 +161,12 @@ class TopItemsBaseView(SpotifyAPIView):
         return time_range
 
 class TopTracksView(TopItemsBaseView):
+    @method_decorator(cache_page(60 * 5)) # 5 mins
+    @method_decorator(vary_on_headers('Authorization'))
     def get(self, request, *args, **kwargs):
+        print("Re-fetching TopTracksView")
+        time.sleep(2) # artificial delay
+
         time_range = self.get_time_range()
         data = self.spotify_request('/me/top/tracks', {'limit': 50, 'time_range': time_range})
         if 'error' in data:
@@ -125,7 +174,12 @@ class TopTracksView(TopItemsBaseView):
         return Response(data.get('items', []))
 
 class TopArtistsView(TopItemsBaseView):
+    @method_decorator(cache_page(60 * 5))
+    @method_decorator(vary_on_headers('Authorization'))
     def get(self, request, *args, **kwargs):
+        print("Re-fetching TopArtistsView")
+        time.sleep(2) # artificial delay
+        
         time_range = self.get_time_range()
         data = self.spotify_request('/me/top/artists', {'limit': 50, 'time_range': time_range})
         if 'error' in data:
@@ -133,7 +187,12 @@ class TopArtistsView(TopItemsBaseView):
         return Response(data.get('items', []))
 
 class TopGenresView(TopItemsBaseView):
+    @method_decorator(cache_page(60 * 5))
+    @method_decorator(vary_on_headers('Authorization'))
     def get(self, request, *args, **kwargs):
+        print("Re-calculating TopGenresView")
+        time.sleep(2) # artificial delay
+        
         time_range = self.get_time_range()
         artists_data = self.spotify_request('/me/top/artists', {'limit': 50, 'time_range': time_range})
         if 'error' in artists_data:
@@ -144,7 +203,12 @@ class TopGenresView(TopItemsBaseView):
         return Response(top_genres)
 
 class TopAlbumsView(TopItemsBaseView):
+    @method_decorator(cache_page(60 * 5))
+    @method_decorator(vary_on_headers('Authorization'))
     def get(self, request, *args, **kwargs):
+        print("Re-calculating TopAlbumsView")
+        time.sleep(2) # artificial delay
+        
         time_range = self.get_time_range()
         tracks_data = self.spotify_request('/me/top/tracks', {'limit': 50, 'time_range': time_range})
         if 'error' in tracks_data:

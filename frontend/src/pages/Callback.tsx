@@ -57,8 +57,6 @@ const Callback = () => {
 					},
 				});
 				const userData = userResponse.data;
-
-				// --- THIS IS THE KEY CHANGE ---
 				// 3. Update the global state using the login function from Zustand
 				const userProfileForState: UserProfile = {
 					spotify_id: userData.id,
@@ -83,7 +81,7 @@ const Callback = () => {
 
 				// 5. Success! Store backend token and navigate
 				localStorage.setItem("auth_token", saveResponse.data.token);
-				localStorage.removeItem("spotify_verifier");
+				localStorage.removeItem("spotify_verifier"); // removes code given by spotify
 				navigate("/dashboard");
 			} catch (error) {
 				if (axios.isAxiosError(error)) {
@@ -105,7 +103,7 @@ const Callback = () => {
 	}, [navigate, login]); // Add login to the dependency array
 
 	return (
-		<div className="bg-gray-900 text-white min-h-screen flex items-center justify-center">
+		<div className="bg-black text-white min-h-screen flex items-center justify-center">
 			<div className="text-center flex items-center gap-2">
 				<p className="text-3xl font-semibold">Logging In with </p>
 				<svg

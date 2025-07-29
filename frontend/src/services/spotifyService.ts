@@ -33,7 +33,6 @@ export const fetchUserProfile = async (): Promise<UserProfile> => {
 
 export const fetchSnapshotData = async (): Promise<SnapshotData> => {
 	const client = getClient();
-	// This endpoint matches the new SnapshotView in your Django backend.
 	const response = await client.get("/spotify/snapshot/");
 	return response.data;
 };
