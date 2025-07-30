@@ -76,13 +76,7 @@ const Dashboard = () => {
 	}, [navigate, logout]);
 
 	const handleDownload = (playlist: Playlist) => {
-		console.log("Navigating to download page for:", playlist.name);
 		navigate(`/download/${playlist.id}`);
-	};
-
-	const handleDelete = (playlist: Playlist) => {
-		console.log("Delete playlist:", playlist.name, playlist.id);
-		// TODO: Implement playlist deletion logic (requires confirmation)
 	};
 
 	if (loading) {
@@ -285,13 +279,6 @@ const Dashboard = () => {
 										className="text-green-400 hover:text-white transition-colors cursor-pointer"
 									>
 										<ArrowDownTrayIcon className="h-6 w-6" />
-									</button>
-									<button
-										title="Delete"
-										onClick={() => handleDelete(playlist)}
-										className="text-green-400 hover:text-red-600 transition-colors cursor-pointer"
-									>
-										<TrashIcon className="h-6 w-6" />
 									</button>
 								</div>
 							</div>

@@ -36,5 +36,6 @@ urlpatterns = [
     path('api/spotify/playlists/', spotify.PlaylistsView.as_view(), name='spotify_playlists'),
     path('api/spotify/playlists/<str:playlist_id>/', spotify.PlaylistDetailView.as_view()),
 
-    path('api/download/', download.DownloadTrack.as_view(), name='download_track'),
+    path('api/download/playlist/<str:playlist_id>/', download.DownloadPlaylist.as_view(), name='download-playlist'),
+    # path('api/download/status/<str:task_id>/', download.DownloadStatus.as_view(), name='download-status'),
 ]

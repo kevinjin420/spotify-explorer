@@ -69,7 +69,6 @@ class SnapshotView(SpotifyAPIView):
     @method_decorator(vary_on_headers('Authorization'))
     def get(self, request, *args, **kwargs):
         print("Re-fetching SnapshotView")
-        time.sleep(2) # artificial delay
 
         top_tracks_data = self.spotify_request('/me/top/tracks', {'limit': 50, 'time_range': 'short_term'})
         top_artists_data = self.spotify_request('/me/top/artists', {'limit': 50, 'time_range': 'short_term'})
@@ -110,7 +109,6 @@ class TopTracksView(TopItemsBaseView):
     @method_decorator(vary_on_headers('Authorization'))
     def get(self, request, *args, **kwargs):
         print("Re-fetching TopTracksView")
-        time.sleep(2) # artificial delay
 
         time_range = self.get_time_range()
         data = self.spotify_request('/me/top/tracks', {'limit': 50, 'time_range': time_range})
@@ -123,7 +121,6 @@ class TopArtistsView(TopItemsBaseView):
     @method_decorator(vary_on_headers('Authorization'))
     def get(self, request, *args, **kwargs):
         print("Re-fetching TopArtistsView")
-        time.sleep(2) # artificial delay
         
         time_range = self.get_time_range()
         data = self.spotify_request('/me/top/artists', {'limit': 50, 'time_range': time_range})
@@ -136,7 +133,6 @@ class TopGenresView(TopItemsBaseView):
     @method_decorator(vary_on_headers('Authorization'))
     def get(self, request, *args, **kwargs):
         print("Re-calculating TopGenresView")
-        time.sleep(2) # artificial delay
         
         time_range = self.get_time_range()
         artists_data = self.spotify_request('/me/top/artists', {'limit': 50, 'time_range': time_range})
@@ -152,7 +148,6 @@ class TopAlbumsView(TopItemsBaseView):
     @method_decorator(vary_on_headers('Authorization'))
     def get(self, request, *args, **kwargs):
         print("Re-calculating TopAlbumsView")
-        time.sleep(2) # artificial delay
         
         time_range = self.get_time_range()
         tracks_data = self.spotify_request('/me/top/tracks', {'limit': 50, 'time_range': time_range})

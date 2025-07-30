@@ -13,3 +13,4 @@ requests==2.32.4
 sqlparse==0.5.3
 urllib3==2.5.0
 yt-dlp==2025.7.21
+gunicorn==22.0.0
