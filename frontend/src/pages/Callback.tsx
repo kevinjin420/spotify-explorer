@@ -50,24 +50,13 @@ const Callback = () => {
 				);
 				const tokenData = tokenResponse.data;
 
-				// 2. Fetch user profile
 				const userResponse = await axios.get(userProfileUrl, {
 					headers: {
 						Authorization: `Bearer ${tokenData.access_token}`,
 					},
 				});
 				const userData = userResponse.data;
-				// 3. Update the global state using the login function from Zustand
-				const userProfileForState: UserProfile = {
-					spotify_id: userData.id,
-					display_name: userData.display_name,
-					profile_image: userData.images?.[0]?.url || null,
-					email: userData.email,
-				};
-				login(userProfileForState);
-				// -----------------------------
 
-				// 4. Send complete data to your backend
 				const saveResponse = await axios.post(backendAuthUrl, {
 					spotify_id: userData.id,
 					display_name: userData.display_name,
@@ -79,9 +68,15 @@ const Callback = () => {
 					scope: tokenData.scope,
 				});
 
-				// 5. Success! Store backend token and navigate
-				localStorage.setItem("auth_token", saveResponse.data.token);
-				localStorage.removeItem("spotify_verifier"); // removes code given by spotify
+				const userProfileForState: UserProfile = {
+					spotify_id: userData.id,
+					display_name: userData.display_name,
+					profile_image: userData.images?.[0]?.url || null,
+					email: userData.email,
+				};
+				login(userProfileForState, saveResponse.data.access, saveResponse.data.refresh);
+
+				localStorage.removeItem("spotify_verifier");
 				navigate("/dashboard");
 			} catch (error) {
 				if (axios.isAxiosError(error)) {
@@ -100,7 +95,7 @@ const Callback = () => {
 		};
 
 		exchangeToken();
-	}, [navigate, login]); // Add login to the dependency array
+	}, [navigate, login]);
 
 	return (
 		<div className="bg-black text-white min-h-screen flex items-center justify-center">

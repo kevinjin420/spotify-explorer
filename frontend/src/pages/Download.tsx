@@ -16,7 +16,6 @@ export default function DownloadPage() {
 		const fetchPlaylistData = async () => {
 			try {
 				const data = await fetchPlaylist(playlistId);
-        console.log(data)
 
         const extractedTracks = data.tracks.items.map((item: any) => ({
           id: item.track.id,

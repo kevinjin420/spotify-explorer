@@ -1,45 +1,60 @@
-const API_BASE = "http://localhost:8000/api";
+import axios from 'axios';
 
-export interface AuthResponse {
-  token?: string;
-  error?: string;
+const API_BASE = 'http://localhost:8000/api';
+
+export const api = axios.create({
+  baseURL: API_BASE,
+});
+
+api.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const originalRequest = error.config;
+    if (error.response.status === 401 && !originalRequest._retry) {
+      originalRequest._retry = true;
+      const refreshToken = localStorage.getItem('refresh_token');
+      if (!refreshToken) {
+        // Handle logout
+        return Promise.reject(error);
+      }
+      try {
+        const { data } = await axios.post(`${API_BASE}/token/refresh/`, {
+          refresh: refreshToken,
+        });
+        localStorage.setItem('access_token', data.access);
+        api.defaults.headers.common['Authorization'] = `Bearer ${data.access}`;
+        return api(originalRequest);
+      } catch (refreshError) {
+        // Handle logout
+        return Promise.reject(refreshError);
+      }
+    }
+    return Promise.reject(error);
+  }
+);
+
+export function getAccessToken(): string | null {
+  return localStorage.getItem("access_token");
 }
 
-export async function register(username: string, password: string): Promise<AuthResponse> {
-  const res = await fetch(`${API_BASE}/register/`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username, password }),
-  });
-  return await res.json();
+export function getRefreshToken(): string | null {
+    return localStorage.getItem("refresh_token");
 }
 
-export async function login(username: string, password: string): Promise<AuthResponse> {
-  const res = await fetch(`${API_BASE}/login/`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username, password }),
-  });
-  return await res.json();
+export function saveTokens(accessToken: string, refreshToken: string): void {
+  localStorage.setItem("access_token", accessToken);
+  localStorage.setItem("refresh_token", refreshToken);
+  api.defaults.headers.common['Authorization'] = `Bearer ${accessToken}`;
 }
 
-export async function logout(token: string): Promise<void> {
-  await fetch(`${API_BASE}/logout/`, {
-    method: "POST",
-    headers: {
-      Authorization: `Token ${token}`,
-    },
-  });
+export function removeTokens(): void {
+  localStorage.removeItem("access_token");
+  localStorage.removeItem("refresh_token");
+  delete api.defaults.headers.common['Authorization'];
 }
 
-export function getToken(): string | null {
-  return localStorage.getItem("token");
-}
-
-export function saveToken(token: string): void {
-  localStorage.setItem("token", token);
-}
-
-export function removeToken(): void {
-  localStorage.removeItem("token");
+// Set the initial token on app load
+const accessToken = getAccessToken();
+if (accessToken) {
+  api.defaults.headers.common['Authorization'] = `Bearer ${accessToken}`;
 }

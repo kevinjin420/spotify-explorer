@@ -27,6 +27,9 @@ class JWTAuthentication(authentication.BaseAuthentication):
         except Exception as e:
             raise exceptions.AuthenticationFailed(f'Authentication error: {e}')
 
+        if payload.get('type') != 'access':
+            raise exceptions.AuthenticationFailed('Invalid token type')
+
         try:
             spotify_id = payload['spotify_id']
             user = SpotifyUser.objects.get(spotify_id=spotify_id)
@@ -34,3 +37,4 @@ class JWTAuthentication(authentication.BaseAuthentication):
             raise exceptions.AuthenticationFailed('User not found')
 
         return (user, token)
+

@@ -2,91 +2,34 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework import status
-from .models import SpotifyUser, Playlist
-from .serializers import SpotifyUserSerializer, SpotifyPlaylistSerializer
-from datetime import datetime, timedelta
-from django.conf import settings
+from datetime import timedelta
 from django.utils import timezone
+from django.conf import settings
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import cache_page
-from django.views.decorators.vary import vary_on_cookie, vary_on_headers
+from django.views.decorators.vary import vary_on_headers
 import requests
 from collections import Counter
-import jwt
 import os
 import time
-from yt_dlp import YoutubeDL
-
-class SpotifyUserView(APIView):
-    """Handles user creation and authentication, returning a JWT."""
-    permission_classes = [AllowAny]
-
-    def post(self, request):
-        serializer = SpotifyUserSerializer(data=request.data)
-        if not serializer.is_valid():
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-        validated_data = serializer.validated_data
-        token_expires_in = validated_data['token_expires_in']
-        token_expires_at = datetime.now() + timedelta(seconds=token_expires_in)
-        
-        user, created = SpotifyUser.objects.update_or_create(
-            spotify_id=validated_data['spotify_id'],
-            defaults={
-                **validated_data,
-                'token_expires_at': token_expires_at,
-            }
-        )
-
-        payload = {
-            'spotify_id': user.spotify_id,
-            'exp': datetime.now() + timedelta(hours=1),
-        }
-        token = jwt.encode(payload, settings.JWT_SECRET_KEY, algorithm='HS256')
-
-        return Response({"message": "User authenticated", "token": token}, status=status.HTTP_200_OK)
-
-    def delete(self, request):
-        spotify_id = request.data.get('spotify_id')
-        if not spotify_id:
-            return Response({'error': 'spotify_id required'}, status=status.HTTP_400_BAD_REQUEST)
-        try:
-            user = SpotifyUser.objects.get(spotify_id=spotify_id)
-            user.delete()
-            return Response({'status': 'deleted'}, status=status.HTTP_200_OK)
-        except SpotifyUser.DoesNotExist:
-            return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
-
-
-class MeView(APIView):
-    """Returns the profile of the currently authenticated user."""
-    permission_classes = [IsAuthenticated] 
-
-    def get(self, request):
-        serializer = SpotifyUserSerializer(request.user)
-        return Response(serializer.data)
 
 
 class SpotifyAPIView(APIView):
     """Base class to handle authenticated requests to the Spotify API."""
     permission_classes = [IsAuthenticated]
 
-class SpotifyAPIView(APIView):
-    permission_classes = [IsAuthenticated]
-
     def refresh_access_token_if_needed(self, user):
-        print("Refreshing Access Token")
-        time_since_update = (timezone.now() - user.updated_at).total_seconds()
-        if time_since_update < user.token_expires_in:
+        if user.token_expires_at > timezone.now():
             return
 
+        print("Refreshing expired Spotify access token")
         response = requests.post(
             'https://accounts.spotify.com/api/token',
             data={
                 'grant_type': 'refresh_token',
                 'refresh_token': user.refresh_token,
-                'client_id': settings.SPOTIFY_CLIENT_ID,
-                'client_secret': settings.SPOTIFY_CLIENT_SECRET,
+                'client_id': os.getenv('SPOTIFY_CLIENT_ID'),
+                'client_secret': os.getenv('SPOTIFY_CLIENT_SECRET'),
             },
             headers={'Content-Type': 'application/x-www-form-urlencoded'}
         )
@@ -97,15 +40,17 @@ class SpotifyAPIView(APIView):
         token_data = response.json()
         user.access_token = token_data['access_token']
         user.token_expires_in = token_data.get('expires_in', 3600)
+        user.token_expires_at = timezone.now() + timedelta(seconds=user.token_expires_in)
         user.save()
 
-    def get_spotify_api_headers(self):
+    def get_spotify_api_headers(self): 
         self.refresh_access_token_if_needed(self.request.user)
         return {
             'Authorization': f'Bearer {self.request.user.access_token}'
         }
 
     def spotify_request(self, endpoint, params=None):
+        self.refresh_access_token_if_needed(self.request.user)
         headers = self.get_spotify_api_headers()
         try:
             response = requests.get(f'https://api.spotify.com/v1{endpoint}', headers=headers, params=params)
@@ -253,34 +198,3 @@ class PlaylistDetailView(SpotifyAPIView):
             return Response({'error': 'Failed to fetch from Spotify'}, status=status.HTTP_502_BAD_GATEWAY)
         return Response(playlist_data, status=status.HTTP_200_OK)
     
-class DownloadTrack(APIView):
-    def post(request):
-        track_title = request.data.get('title')
-        artist = request.data.get('artist')
-
-        if not track_title or not artist:
-            return Response({'error': 'Missing title or artist'}, status=400)
-
-        query = f"ytsearch:{track_title} {artist}"
-        output_dir = "/path/to/downloads/"
-        os.makedirs(output_dir, exist_ok=True)
-
-        ydl_opts = {
-            'format': 'bestaudio/best',
-            'outtmpl': os.path.join(output_dir, '%(title)s.%(ext)s'),
-            'postprocessors': [{
-                'key': 'FFmpegExtractAudio',
-                'preferredcodec': 'mp3',
-                'preferredquality': '192',
-            }],
-            'quiet': True,
-            'noplaylist': True,
-        }
-
-        try:
-            with YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(query, download=True)
-                title = info['title']
-                return Response({'status': 'success', 'title': title})
-        except Exception as e:
-            return Response({'error': str(e)}, status=500)
