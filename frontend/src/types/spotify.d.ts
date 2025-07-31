@@ -42,9 +42,14 @@ export interface Playlist {
   name: string;
   images: Image[];
   tracks: {
+    items: PlaylistItem[];
     total: number;
   };
   external_urls: ExternalUrls;
+}
+
+export interface PlaylistItem {
+	track: TopTrack;
 }
 
 export interface TopAlbum {

@@ -2,7 +2,6 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 import os
-import yt_dlp
 from yt_dlp import YoutubeDL
 import requests
 from django.utils import timezone
@@ -12,6 +11,74 @@ import io
 import zipfile
 import tempfile
 import shutil
+import threading
+import uuid
+
+download_tasks = {}
+
+def _download_and_zip_tracks(task_id, tracks, playlist_name):
+    task = download_tasks[task_id]
+    task['status'] = 'DOWNLOADING'
+    task['total'] = len(tracks)
+    task['completed'] = 0
+
+    temp_dir = tempfile.mkdtemp()
+    downloaded_files = []
+
+    try:
+        ydl_opts = {
+            'format': 'bestaudio/best',
+            'outtmpl': os.path.join(temp_dir, '%(title)s.%(ext)s'),
+            'postprocessors': [{
+                'key': 'FFmpegExtractAudio',
+                'preferredcodec': 'mp3',
+                'preferredquality': '192',
+            }],
+            'quiet': True,
+            'noplaylist': True,
+        }
+
+        with YoutubeDL(ydl_opts) as ydl:
+            for i, item in enumerate(tracks):
+                track = item.get('track')
+                if not track:
+                    continue
+
+                track_name = track.get('name')
+                artist_name = ', '.join([artist.get('name') for artist in track.get('artists', [])])
+                query = f"{track_name} {artist_name} audio"
+
+                try:
+                    info = ydl.extract_info(f"ytsearch:{query}", download=True)['entries'][0]
+                    filename, _ = os.path.splitext(ydl.prepare_filename(info))
+                    downloaded_files.append(filename + '.mp3')
+                except Exception as e:
+                    print(f"Failed to download {track_name}: {e}")
+                
+                task['completed'] = i + 1
+
+        if not downloaded_files:
+            task['status'] = 'FAILED'
+            task['message'] = 'Could not download any tracks.'
+            return
+
+        zip_buffer = io.BytesIO()
+        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+            for file_path in downloaded_files:
+                if os.path.exists(file_path):
+                    zip_file.write(file_path, os.path.basename(file_path))
+
+        zip_buffer.seek(0)
+        task['zip_content'] = zip_buffer.read()
+        task['playlist_name'] = playlist_name
+        task['status'] = 'COMPLETED'
+
+    except Exception as e:
+        task['status'] = 'FAILED'
+        task['message'] = str(e)
+    finally:
+        shutil.rmtree(temp_dir)
+
 
 class DownloadPlaylist(APIView):
     permission_classes = [IsAuthenticated]
@@ -71,52 +138,74 @@ class DownloadPlaylist(APIView):
             return Response({'message': 'No tracks found in the playlist.'}, status=404)
 
         playlist_name = playlist_data.get('name', 'spotify_playlist')
-        temp_dir = tempfile.mkdtemp()
-        downloaded_files = []
+        task_id = str(uuid.uuid4())
 
-        try:
-            ydl_opts = {
-                'format': 'bestaudio/best',
-                'outtmpl': os.path.join(temp_dir, '%(title)s.%(ext)s'),
-                'postprocessors': [{
-                    'key': 'FFmpegExtractAudio',
-                    'preferredcodec': 'mp3',
-                    'preferredquality': '192',
-                }],
-                'quiet': True,
-                'noplaylist': True,
-            }
+        download_tasks[task_id] = {
+            'status': 'PENDING',
+            'user_id': request.user.id,
+        }
 
-            with YoutubeDL(ydl_opts) as ydl:
-                for item in tracks:
-                    track = item.get('track')
-                    if not track:
-                        continue
+        thread = threading.Thread(
+            target=_download_and_zip_tracks,
+            args=(task_id, tracks, playlist_name)
+        )
+        thread.start()
 
-                    track_name = track.get('name')
-                    artist_name = ', '.join([artist.get('name') for artist in track.get('artists', [])])
-                    query = f"{track_name} {artist_name} audio"
+        return Response(
+            {'task_id': task_id, 'message': 'Playlist download started.'},
+            status=202
+        )
 
-                    try:
-                        info = ydl.extract_info(f"ytsearch:{query}", download=True)['entries'][0]
-                        filename, _ = os.path.splitext(ydl.prepare_filename(info))
-                        downloaded_files.append(filename + '.mp3')
-                    except Exception as e:
-                        print(f"Failed to download {track_name}: {e}")
 
-            if not downloaded_files:
-                return Response({'message': 'Could not download any tracks.'}, status=404)
+class DownloadStatus(APIView):
+    permission_classes = [IsAuthenticated]
 
-            zip_buffer = io.BytesIO()
-            with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-                for file_path in downloaded_files:
-                    if os.path.exists(file_path):
-                        zip_file.write(file_path, os.path.basename(file_path))
+    def get(self, request, task_id):
+        task = download_tasks.get(task_id)
 
-            zip_buffer.seek(0)
-            response = HttpResponse(zip_buffer, content_type='application/zip')
-            response['Content-Disposition'] = f'attachment; filename="{playlist_name}.zip"'
-            return response
+        if not task:
+            return Response({'message': 'Task not found.'}, status=404)
 
-        finally:
-            shutil.rmtree(temp_dir)
+        if task.get('user_id') != request.user.id:
+            return Response({'message': 'Forbidden.'}, status=403)
+
+        response_data = {
+            'status': task.get('status'),
+            'completed': task.get('completed', 0),
+            'total': task.get('total', 0),
+        }
+        
+        if task.get('status') == 'FAILED':
+            response_data['message'] = task.get('message', 'An unknown error occurred.')
+
+        return Response(response_data)
+
+
+class GetDownload(APIView):
+    """
+    Retrieves the downloaded and zipped playlist file.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, task_id):
+        task = download_tasks.get(task_id)
+
+        if not task:
+            return Response({'message': 'Task not found.'}, status=404)
+
+        if task.get('user_id') != request.user.id:
+            return Response({'message': 'Forbidden.'}, status=403)
+
+        if task.get('status') != 'COMPLETED':
+            return Response({'message': 'Download is not complete.'}, status=202)
+
+        zip_content = task.get('zip_content')
+        if not zip_content:
+            return Response({'message': 'File not found or an error occurred.'}, status=500)
+
+        response = HttpResponse(zip_content, content_type='application/zip')
+        response['Content-Disposition'] = f'attachment; filename="{task.get("playlist_name", "playlist")}.zip"'
+        
+        del download_tasks[task_id]
+        
+        return response
