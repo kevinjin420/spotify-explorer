@@ -73,8 +73,12 @@ class SnapshotView(SpotifyAPIView):
         top_tracks_data = self.spotify_request('/me/top/tracks', {'limit': 50, 'time_range': 'short_term'})
         top_artists_data = self.spotify_request('/me/top/artists', {'limit': 50, 'time_range': 'short_term'})
 
-        if 'error' in top_tracks_data or 'error' in top_artists_data:
-            return Response({'error': 'Failed to fetch data from Spotify.'}, status=status.HTTP_502_BAD_GATEWAY)
+        # print(top_tracks_data)
+        # print(top_artists_data)
+
+        # if 'error' in top_tracks_data or 'error' in top_artists_data:
+        #     print("fuck")
+        #     return Response({'error': 'Failed to fetch data from Spotify.'}, status=status.HTTP_502_BAD_GATEWAY)
 
         top_tracks = top_tracks_data.get('items', [])
         top_artists = top_artists_data.get('items', [])

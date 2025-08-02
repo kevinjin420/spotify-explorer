@@ -74,7 +74,11 @@ const Callback = () => {
 					profile_image: userData.images?.[0]?.url || null,
 					email: userData.email,
 				};
-				login(userProfileForState, saveResponse.data.access, saveResponse.data.refresh);
+				login(
+					userProfileForState,
+					saveResponse.data.access,
+					saveResponse.data.refresh
+				);
 
 				localStorage.removeItem("spotify_verifier");
 				navigate("/dashboard");
