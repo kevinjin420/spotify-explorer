@@ -3,7 +3,6 @@ import { useNavigate } from "react-router-dom";
 import type { TopTrack, TopArtist, TopAlbum, Playlist } from "../types/spotify";
 import {
 	ArrowDownTrayIcon,
-	TrashIcon,
 	LinkIcon,
 } from "@heroicons/react/24/outline";
 import {

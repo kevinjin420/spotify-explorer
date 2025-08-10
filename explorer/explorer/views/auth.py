@@ -1,99 +1,80 @@
+import requests
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny
-from rest_framework import status
+from django.utils import timezone
+from datetime import timedelta
+from rest_framework_simplejwt.tokens import RefreshToken
 from ..models import SpotifyUser
 from ..serializers import SpotifyUserSerializer
-from datetime import timedelta
-from django.utils import timezone
-from django.conf import settings
-import jwt
+import os
 
 
-class SpotifyUserView(APIView):
-    """Handles user creation and authentication, returning a JWT."""
+class SpotifyLogin(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
-        serializer = SpotifyUserSerializer(data=request.data)
-        if not serializer.is_valid():
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        code = request.data.get("code")
+        verifier = request.data.get("verifier")
 
-        validated_data = serializer.validated_data
-        token_expires_in = validated_data['token_expires_in']
-        token_expires_at = timezone.now() + timedelta(seconds=token_expires_in)
-        
-        user, created = SpotifyUser.objects.update_or_create(
-            spotify_id=validated_data['spotify_id'],
-            defaults={
-                **validated_data,
-                'token_expires_at': token_expires_at,
-            }
-        )
-
-        access_payload = {
-            'spotify_id': user.spotify_id,
-            'exp': timezone.now() + timedelta(minutes=15),
-            'type': 'access'
-        }
-        access_token = jwt.encode(access_payload, settings.JWT_SECRET_KEY, algorithm='HS256')
-
-        refresh_payload = {
-            'spotify_id': user.spotify_id,
-            'exp': timezone.now() + timedelta(days=7),
-            'type': 'refresh'
-        }
-        refresh_token = jwt.encode(refresh_payload, settings.JWT_SECRET_KEY, algorithm='HS256')
-
-        return Response({
-            "message": "User authenticated",
-            "access": access_token,
-            "refresh": refresh_token
-        }, status=status.HTTP_200_OK)
-
-    def delete(self, request):
-        spotify_id = request.data.get('spotify_id')
-        if not spotify_id:
-            return Response({'error': 'spotify_id required'}, status=status.HTTP_400_BAD_REQUEST)
-        try:
-            user = SpotifyUser.objects.get(spotify_id=spotify_id)
-            user.delete()
-            return Response({'status': 'deleted'}, status=status.HTTP_200_OK)
-        except SpotifyUser.DoesNotExist:
-            return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
-
-
-class RefreshTokenView(APIView):
-    permission_classes = [AllowAny]
-
-    def post(self, request):
-        refresh_token = request.data.get('refresh')
-        if not refresh_token:
-            return Response({'error': 'Refresh token required'}, status=status.HTTP_400_BAD_REQUEST)
+        if not code or not verifier:
+            return Response({"error": "Missing code or verifier"}, status=400)
 
         try:
-            payload = jwt.decode(refresh_token, settings.JWT_SECRET_KEY, algorithms=['HS256'])
-        except jwt.ExpiredSignatureError:
-            return Response({'error': 'Refresh token has expired'}, status=status.HTTP_401_UNAUTHORIZED)
-        except jwt.InvalidTokenError:
-            return Response({'error': 'Invalid refresh token'}, status=status.HTTP_401_UNAUTHORIZED)
+            # 1. Exchange code + verifier for tokens from Spotify
+            token_response = requests.post(
+                "https://accounts.spotify.com/api/token",
+                data={
+                    "grant_type": "authorization_code",
+                    "code": code,
+                    "redirect_uri": "http://127.0.0.1:5173/callback",
+                    "client_id": os.getenv("SPOTIFY_CLIENT_ID"),
+                    "code_verifier": verifier,
+                },
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+            )
+            token_response.raise_for_status()
+            token_data = token_response.json()
 
-        if payload.get('type') != 'refresh':
-            return Response({'error': 'Invalid token type'}, status=status.HTTP_401_UNAUTHORIZED)
+            access_token = token_data["access_token"]
+            refresh_token = token_data["refresh_token"]
+            expires_in = token_data["expires_in"]
+            scope = token_data["scope"]
 
-        spotify_id = payload['spotify_id']
-        try:
-            user = SpotifyUser.objects.get(spotify_id=spotify_id)
-        except SpotifyUser.DoesNotExist:
-            return Response({'error': 'User not found'}, status=status.HTTP_401_UNAUTHORIZED)
+            # 2. Get Spotify profile
+            profile_response = requests.get(
+                "https://api.spotify.com/v1/me",
+                headers={"Authorization": f"Bearer {access_token}"},
+            )
+            profile_response.raise_for_status()
+            user_data = profile_response.json()
 
-        access_payload = {
-            'spotify_id': user.spotify_id,
-            'exp': timezone.now() + timedelta(minutes=15),
-            'type': 'access'
-        }
-        access_token = jwt.encode(access_payload, settings.JWT_SECRET_KEY, algorithm='HS256')
+            # 3. Save or update user
+            spotify_id = user_data["id"]
+            user, created = SpotifyUser.objects.update_or_create(
+                spotify_id=spotify_id,
+                defaults={
+                    "display_name": user_data["display_name"],
+                    "email": user_data["email"],
+                    "profile_image": user_data["images"][0]["url"] if user_data["images"] else None,
+                    "access_token": access_token,
+                    "refresh_token": refresh_token,
+                    "token_expires_in": expires_in,"token_expires_at": timezone.now() + timedelta(seconds=expires_in),
+                    "scope": scope,
+                },
+            )
 
-        return Response({'access': access_token}, status=status.HTTP_200_OK)
+            # 4. Generate SimpleJWT tokens
+            refresh = RefreshToken()
+            refresh["user_id"] = user.id
 
+            return Response({
+                "access": str(refresh.access_token),
+                "refresh": str(refresh),
+                "user": SpotifyUserSerializer(user).data,
+            })
 
+        except requests.RequestException as e:
+            return Response({"error": "Spotify API error", "detail": str(e)}, status=500)
+        except Exception as e:
+            return Response({"error": "Internal error", "detail": str(e)}, status=500)

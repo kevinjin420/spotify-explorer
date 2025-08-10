@@ -1,18 +1,22 @@
 from django.urls import path, include
-from django.contrib.auth.models import User
+from explorer.explorer.models import SpotifyUser
 from django.contrib import admin
 from rest_framework import routers, serializers, viewsets
 from explorer.explorer.views import auth, user, spotify, download
+from rest_framework_simplejwt.views import (
+    TokenObtainPairView,
+    TokenRefreshView,
+)
 
 # Serializers define the API representation.
 class UserSerializer(serializers.HyperlinkedModelSerializer):
     class Meta:
-        model = User
+        model = SpotifyUser
         fields = ['url', 'username', 'email', 'is_staff']
 
 # ViewSets define the view behavior.
 class UserViewSet(viewsets.ModelViewSet):
-    queryset = User.objects.all()
+    queryset = SpotifyUser.objects.all()
     serializer_class = UserSerializer
 
 # Routers provide an easy way of automatically determining the URL conf.
@@ -23,8 +27,9 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('api-auth/', include('rest_framework.urls', namespace='rest_framework')),
 
-    path('auth/spotify/', auth.SpotifyUserView.as_view(), name='spotify_auth'),
-    path('api/token/refresh/', auth.RefreshTokenView.as_view(), name='token_refresh'),
+    path('auth/spotify/', auth.SpotifyLogin.as_view(), name='spotify_auth'),
+    path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
+    path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
 
     path('api/me/', user.MeView.as_view(), name='me'),
 

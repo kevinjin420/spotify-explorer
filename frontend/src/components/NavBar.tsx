@@ -1,4 +1,3 @@
-// src/components/Navbar.tsx
 import { Fragment } from "react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -8,12 +7,14 @@ import {
 	MenuItem,
 	MenuItems,
 } from "@headlessui/react";
-import { Square2StackIcon, PowerIcon, ChartBarIcon } from "@heroicons/react/16/solid";
+import {
+	Square2StackIcon,
+	PowerIcon,
+	ChartBarIcon,
+} from "@heroicons/react/16/solid";
 import { useAuthStore } from "../store/authStore";
-import { generateCodeVerifier, generateCodeChallenge } from "../utils/pkce.ts";
+import pkceChallenge from "pkce-challenge";
 
-const clientId = "707e6669168b4e1c8259724099a059d9";
-const redirectUri = `http://127.0.0.1:5173/callback`;
 const scope = [
 	"user-read-email",
 	"user-read-private",
@@ -39,18 +40,24 @@ const Navbar = () => {
 	};
 
 	const handleLogin = async () => {
-		const verifier = generateCodeVerifier();
-		const challenge = await generateCodeChallenge(verifier);
+		const { code_verifier, code_challenge } = await pkceChallenge();
 
-		localStorage.setItem("spotify_verifier", verifier);
+		localStorage.setItem("spotify_verifier", code_verifier);
+		console.log(import.meta.env.VITE_SPOTIFY_REDIRECT_URI)
 
 		const authUrl = new URL("https://accounts.spotify.com/authorize");
 		authUrl.searchParams.set("response_type", "code");
-		authUrl.searchParams.set("client_id", clientId);
+		authUrl.searchParams.set(
+			"client_id",
+			import.meta.env.VITE_SPOTIFY_CLIENT_ID
+		);
+		authUrl.searchParams.set(
+			"redirect_uri",
+			import.meta.env.VITE_SPOTIFY_REDIRECT_URI
+		);
 		authUrl.searchParams.set("scope", scope);
-		authUrl.searchParams.set("redirect_uri", redirectUri);
 		authUrl.searchParams.set("code_challenge_method", "S256");
-		authUrl.searchParams.set("code_challenge", challenge);
+		authUrl.searchParams.set("code_challenge", code_challenge);
 		window.location.href = authUrl.toString();
 	};
 
@@ -86,8 +93,7 @@ const Navbar = () => {
 								<img
 									className="w-10 h-10 rounded-full object-cover border-2 border-green-400"
 									src={
-										user?.profile_image ||
-										"placeholder.svg"
+										user?.profile_image || "placeholder.svg"
 									}
 								/>
 							</MenuButton>

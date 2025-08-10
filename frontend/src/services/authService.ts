@@ -1,21 +1,31 @@
 import axios from "axios";
 
-const API_BASE = "http://localhost:8000/api";
+const API_BASE = "http://localhost:8000";
 
 export const api = axios.create({
-	baseURL: API_BASE,
+	baseURL: `${API_BASE}/api`,
 });
+
+const accessToken = getAccessToken();
+if (accessToken) {
+	api.defaults.headers.common["Authorization"] = `Bearer ${accessToken}`;
+}
 
 api.interceptors.response.use(
 	(response) => response,
 	async (error) => {
 		const originalRequest = error.config;
-		if (error.response.status === 403 && !originalRequest._retry) {
+
+		if (
+			error.response?.status === 401 &&
+			!originalRequest._retry &&	
+			getRefreshToken()
+		) {
 			originalRequest._retry = true;
 			const newAccessToken = await refreshToken();
 			if (newAccessToken) {
 				originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
-				console.log("token refresh success");
+				console.log("Token refresh success");
 				return api(originalRequest);
 			}
 		}
@@ -25,18 +35,16 @@ api.interceptors.response.use(
 
 export async function refreshToken(): Promise<string | null> {
 	const refreshToken = getRefreshToken();
-	if (!refreshToken) {
-		return null;
-	}
+	if (!refreshToken) return null;
 
 	try {
-		const { data } = await axios.post(`${API_BASE}/token/refresh/`, {
+		const { data } = await axios.post(`${API_BASE}/api/token/refresh/`, {
 			refresh: refreshToken,
 		});
-		saveTokens(data.access, data.refresh);
+		saveTokens(data.access, refreshToken);
 		return data.access;
 	} catch (error) {
-		console.error("Failed to refresh token", error);
+		console.error("Token refresh failed:", error);
 		removeTokens();
 		return null;
 	}
@@ -60,9 +68,4 @@ export function removeTokens(): void {
 	localStorage.removeItem("access_token");
 	localStorage.removeItem("refresh_token");
 	delete api.defaults.headers.common["Authorization"];
-}
-
-const accessToken = getAccessToken();
-if (accessToken) {
-	api.defaults.headers.common["Authorization"] = `Bearer ${accessToken}`;
 }

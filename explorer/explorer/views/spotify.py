@@ -58,6 +58,7 @@ class SpotifyAPIView(APIView):
             return response.json()
         except requests.exceptions.HTTPError as e:
             if e.response.status_code == 401:
+                print("bad token")
                 return {'error': 'Spotify token may have expired.', 'status_code': 401}
             return {'error': str(e), 'status_code': e.response.status_code}
         except requests.exceptions.RequestException as e:

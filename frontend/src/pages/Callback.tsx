@@ -2,13 +2,8 @@ import { useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { useAuthStore } from "../store/authStore";
-import type { UserProfile } from "../types/spotify"; // Import the UserProfile type
+import type { UserProfile } from "../types/spotify";
 
-// Constants remain the same
-const clientId = "707e6669168b4e1c8259724099a059d9";
-const redirectUri = "http://127.0.0.1:5173/callback";
-const tokenUrl = "https://accounts.spotify.com/api/token";
-const userProfileUrl = "https://api.spotify.com/v1/me";
 const backendAuthUrl = "http://127.0.0.1:8000/auth/spotify/";
 
 const Callback = () => {
@@ -21,80 +16,38 @@ const Callback = () => {
 		hasRun.current = true;
 
 		const exchangeToken = async () => {
-			const code = new URLSearchParams(window.location.search).get(
-				"code"
-			);
+			const code = new URLSearchParams(window.location.search).get("code");
 			const verifier = localStorage.getItem("spotify_verifier");
 
 			if (!code || !verifier) {
-				navigate("/?error=missing_credentials");
+				navigate("/");
+				console.log("pkce code or verifier missing")
 				return;
 			}
 
 			try {
-				// 1. Exchange code for token
-				const tokenResponse = await axios.post(
-					tokenUrl,
-					new URLSearchParams({
-						grant_type: "authorization_code",
-						code,
-						redirect_uri: redirectUri,
-						code_verifier: verifier,
-						client_id: clientId,
-					}),
-					{
-						headers: {
-							"Content-Type": "application/x-www-form-urlencoded",
-						},
-					}
-				);
-				const tokenData = tokenResponse.data;
+				const res = await axios.post(backendAuthUrl, { code, verifier });
 
-				const userResponse = await axios.get(userProfileUrl, {
-					headers: {
-						Authorization: `Bearer ${tokenData.access_token}`,
-					},
-				});
-				const userData = userResponse.data;
+				const { access, refresh, user }: {
+					access: string;
+					refresh: string;
+					user: UserProfile;
+				} = res.data;
 
-				const saveResponse = await axios.post(backendAuthUrl, {
-					spotify_id: userData.id,
-					display_name: userData.display_name,
-					profile_image: userData.images?.[0]?.url || null,
-					email: userData.email,
-					access_token: tokenData.access_token,
-					refresh_token: tokenData.refresh_token,
-					token_expires_in: tokenData.expires_in,
-					scope: tokenData.scope,
-				});
-
-				const userProfileForState: UserProfile = {
-					spotify_id: userData.id,
-					display_name: userData.display_name,
-					profile_image: userData.images?.[0]?.url || null,
-					email: userData.email,
-				};
-				login(
-					userProfileForState,
-					saveResponse.data.access,
-					saveResponse.data.refresh
-				);
-
+				login(user, access, refresh);
 				localStorage.removeItem("spotify_verifier");
 				navigate("/dashboard");
+
 			} catch (error) {
+				let errorMsg = "unexpected";
 				if (axios.isAxiosError(error)) {
-					console.error(
-						"API Error:",
-						error.response?.data || error.message
-					);
-					navigate(
-						`/?error=${error.response?.data?.error || "api_failed"}`
-					);
+					console.error("Axois API Error:", error.response?.data || error.message);
+					errorMsg = error.response?.data?.error || "api_failed";
 				} else {
-					console.error("An unexpected error occurred:", error);
-					navigate("/?error=unexpected");
+					console.error("Unexpected error:", error);
 				}
+				navigate("/");
+				console.log(errorMsg)
 			}
 		};
 
@@ -104,7 +57,7 @@ const Callback = () => {
 	return (
 		<div className="bg-black text-white min-h-screen flex items-center justify-center">
 			<div className="text-center flex items-center gap-2">
-				<p className="text-3xl font-semibold">Logging In with </p>
+				<p className="text-3xl font-semibold">Logging In with</p>
 				<svg
 					xmlns="http://www.w3.org/2000/svg"
 					width="32"

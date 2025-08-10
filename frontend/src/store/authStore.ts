@@ -32,7 +32,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   login: (user, accessToken, refreshToken) => {
     localStorage.setItem('spotify_user', JSON.stringify(user));
     saveTokens(accessToken, refreshToken);
-    set({ user, isLoggedIn: true });
+    set({ user: user, isLoggedIn: true });
   },
 
   logout: () => {

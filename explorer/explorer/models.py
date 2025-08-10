@@ -1,6 +1,7 @@
 from django.db import models
+from django.contrib.auth.models import AbstractUser
 
-class SpotifyUser(models.Model):
+class SpotifyUser(AbstractUser):
     spotify_id = models.CharField(max_length=100, unique=True)
     display_name = models.CharField(max_length=255)
     email = models.EmailField()
